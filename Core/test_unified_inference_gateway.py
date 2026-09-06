@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 import sys
 
-CORE_DIR = Path(r"C:\specter\Core")
+CORE_DIR = Path(__file__).resolve().parent
 if str(CORE_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_DIR))
 
@@ -12,7 +12,8 @@ from unified_inference_gateway import (
     UnifiedInferenceGateway,
     BackendNode,
     CircuitBreaker,
-    CircuitState
+    CircuitState,
+    SpecterHttpServer
 )
 
 class UnifiedInferenceGatewayTests(unittest.IsolatedAsyncioTestCase):
@@ -82,6 +83,59 @@ class UnifiedInferenceGatewayTests(unittest.IsolatedAsyncioTestCase):
         cb.record_success()
         cb.record_success()
         self.assertEqual(cb.state, CircuitState.CLOSED)
+
+    async def test_http_server_endpoints(self):
+        http_server = SpecterHttpServer(self.gateway, host="127.0.0.1", port=18088)
+        await http_server.start()
+
+        import json
+
+        async def send_http(req_bytes: bytes) -> bytes:
+            r, w = await asyncio.open_connection("127.0.0.1", 18088)
+            w.write(req_bytes)
+            await w.drain()
+            resp = await r.read()
+            w.close()
+            await w.wait_closed()
+            return resp
+
+        try:
+            # 1. Test GET /health
+            resp1 = await send_http(b"GET /health HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+            self.assertIn(b"200 OK", resp1)
+            self.assertIn(b'"status": "healthy"', resp1)
+
+            # 2. Test GET /v1/models
+            resp2 = await send_http(b"GET /v1/models HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+            self.assertIn(b"200 OK", resp2)
+            self.assertIn(b"qwen-coder", resp2)
+
+            # 3. Test POST /v1/chat/completions (synchronous)
+            body3 = json.dumps({
+                "model": "qwen-coder",
+                "messages": [{"role": "user", "content": "Ping Specter Gateway"}]
+            }).encode("utf-8")
+            req3 = f"POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {len(body3)}\r\n\r\n".encode("utf-8") + body3
+            resp3 = await send_http(req3)
+            self.assertIn(b"200 OK", resp3)
+            self.assertIn(b"Mock reply", resp3)
+
+            # 4. Test POST /v1/chat/completions (streaming SSE)
+            body4 = json.dumps({
+                "model": "qwen-coder",
+                "messages": [{"role": "user", "content": "Stream test"}],
+                "stream": True
+            }).encode("utf-8")
+            req4 = f"POST /v1/chat/completions HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\nContent-Length: {len(body4)}\r\n\r\n".encode("utf-8") + body4
+            resp4 = await send_http(req4)
+            self.assertIn(b"200 OK", resp4)
+            self.assertIn(b"text/event-stream", resp4)
+            self.assertIn(b"Specter", resp4)
+            self.assertIn(b"[DONE]", resp4)
+
+        finally:
+            await http_server.stop()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -16,7 +16,7 @@ if sys.platform == "win32":
         pass
 
 PYTHON_EXE = sys.executable
-CORE_DIR = Path(r"C:\specter\Core")
+CORE_DIR = Path(__file__).resolve().parent
 LOG_FILE = CORE_DIR / "supervisor_247.log"
 HEALTH_FILE = CORE_DIR / "supervisor_health.json"
 CONTROL_FILE = CORE_DIR / "supervisor_control.json"

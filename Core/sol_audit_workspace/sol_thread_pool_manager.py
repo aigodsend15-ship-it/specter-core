@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 import sys
-CORE_DIR = Path(r"C:\specter\Core")
+CORE_DIR = Path(__file__).resolve().parent.parent
 if str(CORE_DIR) not in sys.path:
     sys.path.insert(0, str(CORE_DIR))
 

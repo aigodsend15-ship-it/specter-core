@@ -42,7 +42,7 @@ import uuid
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 # Default Paths & Constants
-CORE_DIR = Path(r"C:\specter\Core")
+CORE_DIR = Path(__file__).resolve().parent
 CONFIG_DIR = CORE_DIR / "config"
 STORAGE_DIR = CORE_DIR / "storage"
 DEFAULT_DB = STORAGE_DIR / "specter_fabric.sqlite3"

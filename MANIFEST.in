@@ -1,0 +1,6 @@
+include README.md LICENSE pyproject.toml setup.py Dockerfile docker-compose.yml
+recursive-include config *.json
+recursive-include Core *.py
+recursive-exclude * __pycache__
+recursive-exclude * *.py[cod]
+recursive-exclude * *.sqlite3*

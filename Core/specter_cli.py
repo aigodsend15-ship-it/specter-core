@@ -18,7 +18,7 @@ import sys
 import time
 from pathlib import Path
 
-CORE_DIR = Path(r"C:\specter\Core")
+CORE_DIR = Path(__file__).resolve().parent
 HEALTH_FILE = CORE_DIR / "supervisor_health.json"
 CONTROL_FILE = CORE_DIR / "supervisor_control.json"
 STORAGE_DB = CORE_DIR / "storage" / "specter_fabric.sqlite3"

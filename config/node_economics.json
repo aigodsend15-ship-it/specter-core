@@ -1,0 +1,15 @@
+{
+  "operator_name": "Guilherme Peralta Novaes",
+  "billing_mode": "sovereign_zero_debt",
+  "currency": "BRL_USD",
+  "allow_unauthorized_cloud_charges": false,
+  "max_monthly_external_spend_usd": 0.0,
+  "revenue_allocation": {
+    "operator_sustenance_pct": 70,
+    "hardware_reinvestment_pct": 30
+  },
+  "rate_limits": {
+    "free_tier_rpm": 60,
+    "burst_concurrency": 4
+  }
+}

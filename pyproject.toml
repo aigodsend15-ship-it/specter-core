@@ -1,0 +1,49 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "specter-core"
+version = "1.1.0"
+description = "Sovereign Autonomous Execution Mesh, Deterministic Broker, and Unified OpenAI-Compatible Inference Gateway"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Guilherme Peralta Novaes", email = "aigodsend15@gmail.com" }
+]
+keywords = ["agi", "autonomous-agents", "openai-gateway", "inference", "sqlite-wal", "distributed-mesh", "sovereign-ai"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+]
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.20",
+]
+
+[project.urls]
+Homepage = "https://github.com/aigodsend15-ship-it/specter-core"
+Repository = "https://github.com/aigodsend15-ship-it/specter-core.git"
+Issues = "https://github.com/aigodsend15-ship-it/specter-core/issues"
+
+[project.scripts]
+specter-cli = "Core.specter_cli:main"
+specter-gateway = "Core.unified_inference_gateway:main_cli"
+specter-supervisor = "Core.specter_supervisor_247:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["Core*"]
