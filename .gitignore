@@ -1,0 +1,26 @@
+# Ambientes virtuais e caches
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+
+# Bancos de dados locais e logs
+*.sqlite3*
+*.log
+*.log.*
+*.tmp
+storage/
+
+# Credenciais e segredos
+*secrets.json
+*secret*
+*token*
+*auth*
+*cookie*
+*.env
+
+# IDEs
+.vscode/
+.idea/
