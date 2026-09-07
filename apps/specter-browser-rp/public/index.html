@@ -1,1 +1,61 @@
-<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>SPECTER Browser RP</title><link rel="stylesheet" href="/style.css"></head><body><canvas id="game"></canvas><div id="hud"><b>SPECTER BROWSER RP</b><span id="net"> offline</span><div id="stats">$500 · FOOT · 0 players</div></div><div id="hint">WASD mover · mouse olhar · Shift correr · E veículo · Enter chat</div><div id="chat"><div id="messages"></div><input id="chatInput" maxlength="180" placeholder="Chat, /car ou /save"></div><div id="join"><div class="card"><h1>SPECTER Browser RP</h1><p>Protótipo multiplayer clean-room no navegador.</p><input id="name" maxlength="24" value="Player"><button id="joinBtn">Entrar no servidor</button><small>WebGL2 + WebSocket + SQLite. Sem assets proprietários.</small></div></div><script type="module" src="/client.js"></script></body></html>
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>SPECTER SA Web</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <b>SPECTER SA WEB</b><span id="net"> offline</span>
+    <div id="stats">carregando mundo…</div>
+  </div>
+  <div id="hint" class="hidden">WASD mover · mouse olhar · Shift correr · E veículo · Enter chat · Esc solta mouse</div>
+
+  <div id="chat" class="hidden">
+    <div id="messages"></div>
+    <input id="chatInput" maxlength="180" placeholder="Chat, /car ou /save">
+  </div>
+
+  <div id="launcher">
+    <div class="card">
+      <div class="tag">GTASA LOCAL-ASSET WEB RUNTIME</div>
+      <h1>SPECTER SA Web</h1>
+      <p class="lead">O mapa e os modelos são lidos da sua própria instalação do <b>GTA San Andreas clássico para PC</b>. Nenhum asset da Rockstar é hospedado neste servidor.</p>
+
+      <div class="step">
+        <div class="stepno">1</div>
+        <div>
+          <b>Selecione a pasta do GTA San Andreas</b>
+          <small>Ela precisa conter <code>models/gta3.img</code> e <code>data/gta.dat</code>. Chrome/Edge desktop recomendado.</small>
+        </div>
+      </div>
+      <button id="assetBtn" class="primary">Selecionar pasta GTA San Andreas</button>
+
+      <div id="progressBox" class="hidden">
+        <div class="progress"><i id="progressBar"></i></div>
+        <div id="assetStatus">Aguardando…</div>
+      </div>
+
+      <div id="readyBox" class="hidden">
+        <div class="ok">✓ Assets locais reconhecidos</div>
+        <div id="assetStats"></div>
+        <div class="step second">
+          <div class="stepno">2</div>
+          <div><b>Entrar no servidor RP</b><small>Seu jogo continua lendo os arquivos diretamente do seu computador.</small></div>
+        </div>
+        <input id="name" maxlength="24" value="Player" autocomplete="off">
+        <button id="joinBtn" class="primary">Jogar agora</button>
+      </div>
+
+      <div id="errorBox" class="error hidden"></div>
+      <p class="legal">Compatibilidade atual: instalação clássica PC em formato IMG/IDE/IPL/DFF. O runtime usa código clean-room e algoritmos portados de projetos open-source MIT; os arquivos proprietários permanecem locais.</p>
+    </div>
+  </div>
+
+  <script type="module" src="/client.js"></script>
+</body>
+</html>
