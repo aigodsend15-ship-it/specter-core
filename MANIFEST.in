@@ -1,4 +1,4 @@
-include README.md LICENSE pyproject.toml setup.py Dockerfile docker-compose.yml
+include README.md LICENSE pyproject.toml setup.py Dockerfile docker-compose.yml *.bat
 recursive-include config *.json
 recursive-include Core *.py
 recursive-exclude * __pycache__
