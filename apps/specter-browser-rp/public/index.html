@@ -3,56 +3,47 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>SPECTER SA Web</title>
+  <meta name="theme-color" content="#0d1117">
+  <title>SPECTER West Coast RP</title>
   <link rel="stylesheet" href="/style.css">
 </head>
 <body>
   <canvas id="game"></canvas>
 
   <div id="hud" class="hidden">
-    <b>SPECTER SA WEB</b><span id="net"> offline</span>
-    <div id="stats">carregando mundo…</div>
+    <b>SPECTER WEST COAST RP</b><span id="net"> offline</span>
+    <div id="stats">$500 · FOOT · 0 online</div>
   </div>
-  <div id="hint" class="hidden">WASD mover · mouse olhar · Shift correr · E veículo · Enter chat · Esc solta mouse</div>
+  <div id="hint" class="hidden">WASD mover · mouse câmera · Shift correr · E entrar/sair do carro · Enter chat · Esc solta mouse</div>
 
   <div id="chat" class="hidden">
     <div id="messages"></div>
-    <input id="chatInput" maxlength="180" placeholder="Chat, /car ou /save">
+    <input id="chatInput" maxlength="180" placeholder="Chat, /save ou /car">
   </div>
 
   <div id="launcher">
     <div class="card">
-      <div class="tag">GTASA LOCAL-ASSET WEB RUNTIME</div>
-      <h1>SPECTER SA Web</h1>
-      <p class="lead">O mapa e os modelos são lidos da sua própria instalação do <b>GTA San Andreas clássico para PC</b>. Nenhum asset da Rockstar é hospedado neste servidor.</p>
+      <div class="tag">OPEN-WORLD RP · WEBGL · MULTIPLAYER</div>
+      <h1>SPECTER West Coast</h1>
+      <p class="lead">Nosso próprio sandbox urbano inspirado na era dos jogos open-world de PS2: cidade grande, ruas, bairros, carros e multiplayer — sem precisar instalar ou selecionar arquivos do GTA.</p>
 
-      <div class="step">
-        <div class="stepno">1</div>
-        <div>
-          <b>Selecione a pasta do GTA San Andreas</b>
-          <small>Ela precisa conter <code>models/gta3.img</code> e <code>data/gta.dat</code>. Chrome/Edge desktop recomendado.</small>
-        </div>
+      <div class="featuregrid">
+        <div><b>100% direto no site</b><small>Os assets livres são carregados da web e o mundo abre no navegador.</small></div>
+        <div><b>Assets CC0</b><small>Prédios Kenney e conteúdo original/procedural, liberados para redistribuição.</small></div>
+        <div><b>Servidor RP online</b><small>WebSocket autoritativo, chat, persistência e jogadores sincronizados.</small></div>
+        <div><b>Leve</b><small>Geometria low-poly, fog, cache do navegador e resolução limitada.</small></div>
       </div>
-      <button id="assetBtn" class="primary">Selecionar pasta GTA San Andreas</button>
 
-      <div id="progressBox" class="hidden">
+      <div class="loadingbox">
         <div class="progress"><i id="progressBar"></i></div>
-        <div id="assetStatus">Aguardando…</div>
-      </div>
-
-      <div id="readyBox" class="hidden">
-        <div class="ok">✓ Assets locais reconhecidos</div>
+        <div id="loadState">Inicializando cidade…</div>
         <div id="assetStats"></div>
-        <div class="step second">
-          <div class="stepno">2</div>
-          <div><b>Entrar no servidor RP</b><small>Seu jogo continua lendo os arquivos diretamente do seu computador.</small></div>
-        </div>
-        <input id="name" maxlength="24" value="Player" autocomplete="off">
-        <button id="joinBtn" class="primary">Jogar agora</button>
       </div>
 
-      <div id="errorBox" class="error hidden"></div>
-      <p class="legal">Compatibilidade atual: instalação clássica PC em formato IMG/IDE/IPL/DFF. O runtime usa código clean-room e algoritmos portados de projetos open-source MIT; os arquivos proprietários permanecem locais.</p>
+      <input id="name" maxlength="24" value="Player" autocomplete="off" aria-label="Nome do jogador">
+      <button id="joinBtn" class="primary" disabled>JOGAR AGORA</button>
+
+      <p class="legal">Engine do cliente: Three.js (MIT). Prédios: Kenney City Kit Suburban (CC0 1.0) via coleção pública CC0. Estradas, personagem, veículo e layout: código original. Nenhum asset ou código proprietário do GTA San Andreas é distribuído.</p>
     </div>
   </div>
 

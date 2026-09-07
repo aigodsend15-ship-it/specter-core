@@ -1,343 +1,181 @@
-import { GTAInstall, LEGAL_NOTE } from './gtasa-loader.js';
+import * as THREE from 'https://esm.sh/three@0.180.0';
+import { GLTFLoader } from 'https://esm.sh/three@0.180.0/examples/jsm/loaders/GLTFLoader.js';
 
-const $=s=>document.querySelector(s);
-const canvas=$('#game');
-const gl=canvas.getContext('webgl2',{antialias:true,alpha:false,powerPreference:'high-performance'});
-if(!gl) throw new Error('WebGL2 não suportado neste navegador.');
-
-const ui={
-  launcher:$('#launcher'), assetBtn:$('#assetBtn'), assetStatus:$('#assetStatus'),
-  progressBox:$('#progressBox'), progressBar:$('#progressBar'), readyBox:$('#readyBox'),
-  assetStats:$('#assetStats'), errorBox:$('#errorBox'), joinBtn:$('#joinBtn'), name:$('#name'),
-  hud:$('#hud'), net:$('#net'), stats:$('#stats'), hint:$('#hint'), chat:$('#chat'),
-  messages:$('#messages'), chatInput:$('#chatInput')
+const $ = (s) => document.querySelector(s);
+const canvas = $('#game');
+const ui = {
+  launcher: $('#launcher'), joinBtn: $('#joinBtn'), name: $('#name'),
+  loadState: $('#loadState'), progressBar: $('#progressBar'), assetStats: $('#assetStats'),
+  hud: $('#hud'), net: $('#net'), stats: $('#stats'), hint: $('#hint'),
+  chat: $('#chat'), messages: $('#messages'), chatInput: $('#chatInput')
 };
 
-const SPAWN=[2495,14,-1685];
-const WORLD_RADIUS=850;
-let install=null, worldReady=false, worldInstances=[], meshCache=new Map();
-let ws=null,self=null,token=localStorage.specterToken||null,yaw=0.2,pitch=0.24,mode='foot';
-const players=new Map(), keys=new Set();
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(devicePixelRatio || 1, 1.5));
+renderer.setSize(innerWidth, innerHeight, false);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
 
-function setProgress(text,p){
-  ui.progressBox.classList.remove('hidden');
-  ui.assetStatus.textContent=text;
-  if(Number.isFinite(p)) ui.progressBar.style.width=`${Math.max(0,Math.min(1,p))*100}%`;
-}
-function fail(e){
-  console.error(e);
-  ui.errorBox.textContent=`${e?.message||e}`;
-  ui.errorBox.classList.remove('hidden');
-  ui.assetBtn.disabled=false;
-}
-function msg(t){
-  const d=document.createElement('div');d.className='msg';d.textContent=t;
-  ui.messages.append(d);while(ui.messages.children.length>9)ui.messages.firstChild.remove();
-}
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x82b8df);
+scene.fog = new THREE.Fog(0x82b8df, 150, 650);
 
-function shader(type,src){
-  const s=gl.createShader(type);gl.shaderSource(s,src);gl.compileShader(s);
-  if(!gl.getShaderParameter(s,gl.COMPILE_STATUS))throw new Error(gl.getShaderInfoLog(s));
-  return s;
-}
-const vs=`#version 300 es
-precision highp float;
-layout(location=0) in vec3 p;
-layout(location=1) in vec3 n;
-uniform mat4 vp;
-uniform mat4 model;
-out vec3 N;
-out vec3 W;
-void main(){
-  vec4 w=model*vec4(p,1.0);
-  W=w.xyz;
-  N=normalize(mat3(model)*n);
-  gl_Position=vp*w;
-}`;
-const fs=`#version 300 es
-precision highp float;
-in vec3 N;
-in vec3 W;
-uniform vec3 baseColor;
-uniform vec3 eye;
-out vec4 outColor;
-void main(){
-  vec3 sun=normalize(vec3(-0.35,0.82,0.28));
-  float nd=max(dot(normalize(N),sun),0.0);
-  float light=0.42+nd*0.58;
-  vec3 c=baseColor*light;
-  float dist=distance(W,eye);
-  float fog=smoothstep(470.0,850.0,dist);
-  c=mix(c,vec3(0.48,0.68,0.82),fog);
-  outColor=vec4(c,1.0);
-}`;
-const prog=gl.createProgram();
-gl.attachShader(prog,shader(gl.VERTEX_SHADER,vs));
-gl.attachShader(prog,shader(gl.FRAGMENT_SHADER,fs));
-gl.linkProgram(prog);
-if(!gl.getProgramParameter(prog,gl.LINK_STATUS))throw new Error(gl.getProgramInfoLog(prog));
-const U={
-  vp:gl.getUniformLocation(prog,'vp'), model:gl.getUniformLocation(prog,'model'),
-  color:gl.getUniformLocation(prog,'baseColor'), eye:gl.getUniformLocation(prog,'eye')
-};
+const camera = new THREE.PerspectiveCamera(62, innerWidth/innerHeight, 0.1, 1200);
+const hemi = new THREE.HemisphereLight(0xdbeeff, 0x3f4b2e, 1.55);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff0d3, 2.0);
+sun.position.set(-120, 180, 90);
+scene.add(sun);
 
-function normalize3(a){
-  const l=Math.hypot(a[0],a[1],a[2])||1;return[a[0]/l,a[1]/l,a[2]/l];
-}
-function sub3(a,b){return[a[0]-b[0],a[1]-b[1],a[2]-b[2]]}
-function cross3(a,b){return[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]}
-function dot3(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]}
+const ROAD_SPACING = 56;
+const ROAD_WIDTH = 12;
+const BLOCK = ROAD_SPACING - ROAD_WIDTH;
 
-function perspective(fovy,aspect,near,far){
-  const f=1/Math.tan(fovy/2),nf=1/(near-far);
-  return new Float32Array([
-    f/aspect,0,0,0,
-    0,f,0,0,
-    0,0,(far+near)*nf,-1,
-    0,0,2*far*near*nf,0
-  ]);
-}
-function lookAt(eye,center,up=[0,1,0]){
-  const z=normalize3(sub3(eye,center));
-  const x=normalize3(cross3(up,z));
-  const y=cross3(z,x);
-  return new Float32Array([
-    x[0],y[0],z[0],0,
-    x[1],y[1],z[1],0,
-    x[2],y[2],z[2],0,
-    -dot3(x,eye),-dot3(y,eye),-dot3(z,eye),1
-  ]);
-}
-function mul(a,b){
-  const r=new Float32Array(16);
-  for(let c=0;c<4;c++)for(let row=0;row<4;row++)
-    r[c*4+row]=a[row]*b[c*4]+a[4+row]*b[c*4+1]+a[8+row]*b[c*4+2]+a[12+row]*b[c*4+3];
-  return r;
-}
-function modelMatrix(q,p,scale=[1,1,1]){
-  let [x,y,z,w]=q;
-  const l=Math.hypot(x,y,z,w)||1;x/=l;y/=l;z/=l;w/=l;
-  const x2=x+x,y2=y+y,z2=z+z;
-  const xx=x*x2,xy=x*y2,xz=x*z2,yy=y*y2,yz=y*z2,zz=z*z2;
-  const wx=w*x2,wy=w*y2,wz=w*z2;
-  return new Float32Array([
-    (1-(yy+zz))*scale[0],(xy+wz)*scale[0],(xz-wy)*scale[0],0,
-    (xy-wz)*scale[1],(1-(xx+zz))*scale[1],(yz+wx)*scale[1],0,
-    (xz+wy)*scale[2],(yz-wx)*scale[2],(1-(xx+yy))*scale[2],0,
-    p[0],p[1],p[2],1
-  ]);
-}
-function identityAt(p,scale=[1,1,1]){return modelMatrix([0,0,0,1],p,scale)}
+const groundMat = new THREE.MeshStandardMaterial({color:0x5d8450, roughness:1});
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(760,760), groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.position.y = -0.03;
+scene.add(ground);
 
-function hashColor(s){
-  let h=2166136261;
-  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}
-  const r=0.42+((h>>>0)&255)/255*0.28;
-  const g=0.40+((h>>>8)&255)/255*0.28;
-  const b=0.38+((h>>>16)&255)/255*0.25;
-  return [r,g,b];
+const roadMat = new THREE.MeshStandardMaterial({color:0x30343a, roughness:0.95});
+const curbMat = new THREE.MeshStandardMaterial({color:0x94999b, roughness:1});
+const laneMat = new THREE.MeshBasicMaterial({color:0xd9c36a});
+
+function plane(w,d,mat,x,z,y=0){
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w,d),mat);
+  m.rotation.x=-Math.PI/2;m.position.set(x,y,z);scene.add(m);return m;
+}
+for(let i=-5;i<=5;i++){
+  const p=i*ROAD_SPACING;
+  plane(ROAD_WIDTH,650,roadMat,p,0,.005);
+  plane(650,ROAD_WIDTH,roadMat,0,p,.005);
+  plane(.12,650,laneMat,p,0,.012);
+  plane(650,.12,laneMat,0,p,.012);
+  plane(1.2,650,curbMat,p-ROAD_WIDTH/2-.7,0,.009);
+  plane(1.2,650,curbMat,p+ROAD_WIDTH/2+.7,0,.009);
+  plane(650,1.2,curbMat,0,p-ROAD_WIDTH/2-.7,.009);
+  plane(650,1.2,curbMat,0,p+ROAD_WIDTH/2+.7,.009);
 }
 
-function computeNormals(v,ind){
-  const n=new Float32Array(v.length);
-  for(let i=0;i+2<ind.length;i+=3){
-    const ia=ind[i]*3,ib=ind[i+1]*3,ic=ind[i+2]*3;
-    const ax=v[ia],ay=v[ia+1],az=v[ia+2];
-    const bx=v[ib],by=v[ib+1],bz=v[ib+2];
-    const cx=v[ic],cy=v[ic+1],cz=v[ic+2];
-    const abx=bx-ax,aby=by-ay,abz=bz-az,acx=cx-ax,acy=cy-ay,acz=cz-az;
-    const nx=aby*acz-abz*acy,ny=abz*acx-abx*acz,nz=abx*acy-aby*acx;
-    for(const j of[ia,ib,ic]){n[j]+=nx;n[j+1]+=ny;n[j+2]+=nz}
-  }
-  for(let i=0;i<n.length;i+=3){
-    const l=Math.hypot(n[i],n[i+1],n[i+2])||1;n[i]/=l;n[i+1]/=l;n[i+2]/=l;
-  }
-  return n;
-}
-function makeMesh(data){
-  const vao=gl.createVertexArray();gl.bindVertexArray(vao);
-  const vb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,vb);gl.bufferData(gl.ARRAY_BUFFER,data.vertices,gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(0);gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
-  const normals=computeNormals(data.vertices,data.indices);
-  const nb=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,nb);gl.bufferData(gl.ARRAY_BUFFER,normals,gl.STATIC_DRAW);
-  gl.enableVertexAttribArray(1);gl.vertexAttribPointer(1,3,gl.FLOAT,false,0,0);
-  const ib=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ib);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,data.indices,gl.STATIC_DRAW);
-  gl.bindVertexArray(null);
-  return {vao,count:data.indices.length,type:data.indices instanceof Uint32Array?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT};
-}
+const seedRand=(()=>{let s=0x51a5f00d;return()=>((s=Math.imul(s,1664525)+1013904223>>>0)/4294967296)})();
+const buildingURLs='abcdefghij'.split('').map(ch=>`https://raw.githubusercontent.com/petroulacl/fps-buildings-env-kit/main/buildings/kenney-city-kit-suburban/Models/GLB%20format/building-type-${ch}.glb`);
+const loader=new GLTFLoader();
+const prototypes=[];
 
-function cubeMesh(){
-  const v=new Float32Array([
-    -1,-1,-1, 1,-1,-1, 1,1,-1,-1,1,-1,
-    -1,-1,1, 1,-1,1, 1,1,1,-1,1,1
-  ]);
-  const i=new Uint16Array([
-    0,2,1,0,3,2,4,5,6,4,6,7,0,4,7,0,7,3,
-    1,2,6,1,6,5,3,7,6,3,6,2,0,1,5,0,5,4
-  ]);
-  return makeMesh({vertices:v,indices:i});
+function setProgress(text,p){ui.loadState.textContent=text;ui.progressBar.style.width=`${Math.round(Math.max(0,Math.min(1,p))*100)}%`}
+function fallbackBuilding(color=0xb9aa91){
+  const g=new THREE.Group();
+  const h=8+seedRand()*16,w=8+seedRand()*8,d=8+seedRand()*8;
+  const body=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),new THREE.MeshStandardMaterial({color,roughness:.9}));body.position.y=h/2;g.add(body);
+  const roof=new THREE.Mesh(new THREE.BoxGeometry(w*.82,.6,d*.82),new THREE.MeshStandardMaterial({color:0x5c5e61,roughness:1}));roof.position.y=h+.3;g.add(roof);
+  return g;
 }
-const playerMesh=cubeMesh();
-
-async function prepareWorld(){
-  const placements=install.nearby(SPAWN,WORLD_RADIUS,1500);
-  if(!placements.length) throw new Error('A instalação foi reconhecida, mas nenhum placement externo foi encontrado perto de Los Santos.');
-  const names=[];
-  const seen=new Set();
-  for(const p of placements) if(!seen.has(p.model)){seen.add(p.model);names.push(p.model)}
-  const selectedNames=names.slice(0,260);
-  const selected=new Set(selectedNames);
-  let next=0,ok=0,failed=0;
-  async function worker(){
-    while(true){
-      const idx=next++;if(idx>=selectedNames.length)return;
-      const name=selectedNames[idx];
-      try{
-        const raw=await install.model(name);
-        if(raw.vertices.length/3>300000 || raw.indices.length>900000) throw new Error('mesh grande demais');
-        meshCache.set(name,makeMesh(raw));ok++;
-      }catch(e){failed++;console.debug('DFF skip',name,e)}
-      if((idx&7)===0){
-        setProgress(`Convertendo DFF: ${Math.min(idx+1,selectedNames.length)}/${selectedNames.length} · ${ok} modelos prontos`,0.64+0.30*((idx+1)/selectedNames.length));
-        await new Promise(r=>setTimeout(r,0));
-      }
+async function loadPrototype(url){
+  try{
+    const gltf=await loader.loadAsync(url);
+    const root=gltf.scene;
+    const box=new THREE.Box3().setFromObject(root);
+    const size=box.getSize(new THREE.Vector3());
+    root.scale.multiplyScalar(15/Math.max(size.x,size.z,.001));
+    const fixed=new THREE.Group();fixed.add(root);
+    const b2=new THREE.Box3().setFromObject(fixed);fixed.position.y-=b2.min.y;
+    fixed.traverse(o=>{if(o.isMesh){o.castShadow=false;o.receiveShadow=false}});
+    return fixed;
+  }catch(e){console.warn('CC0 building fallback',url,e);return fallbackBuilding()}
+}
+function addTree(x,z,s=1){
+  const trunk=new THREE.Mesh(new THREE.CylinderGeometry(.18*s,.28*s,2.1*s,7),new THREE.MeshStandardMaterial({color:0x6f4d2f}));trunk.position.set(x,1.05*s,z);scene.add(trunk);
+  const crown=new THREE.Mesh(new THREE.IcosahedronGeometry(1.05*s,1),new THREE.MeshStandardMaterial({color:0x3f7d45,roughness:1}));crown.position.set(x,2.7*s,z);scene.add(crown);
+}
+function addLamp(x,z,rot=0){
+  const g=new THREE.Group();const poleMat=new THREE.MeshStandardMaterial({color:0x3d4248,metalness:.45,roughness:.55});
+  const pole=new THREE.Mesh(new THREE.CylinderGeometry(.06,.08,4.8,8),poleMat);pole.position.y=2.4;g.add(pole);
+  const arm=new THREE.Mesh(new THREE.BoxGeometry(.08,.08,1.05),poleMat);arm.position.set(.45,4.75,0);g.add(arm);
+  const bulb=new THREE.Mesh(new THREE.BoxGeometry(.35,.12,.22),new THREE.MeshStandardMaterial({color:0xf5e2a7,emissive:0x493d16,emissiveIntensity:.3}));bulb.position.set(.95,4.68,0);g.add(bulb);
+  g.position.set(x,0,z);g.rotation.y=rot;scene.add(g);
+}
+async function buildCity(){
+  setProgress('Carregando prédios CC0 da web…',.08);
+  let done=0;
+  for(const url of buildingURLs){prototypes.push(await loadPrototype(url));done++;setProgress(`Carregando assets CC0: ${done}/${buildingURLs.length}`,.08+.42*done/buildingURLs.length)}
+  let count=0;
+  for(let gx=-5;gx<5;gx++)for(let gz=-5;gz<5;gz++){
+    const cx=gx*ROAD_SPACING+ROAD_SPACING/2,cz=gz*ROAD_SPACING+ROAD_SPACING/2;
+    if((gx+gz*3)%11===0){plane(BLOCK-4,BLOCK-4,new THREE.MeshStandardMaterial({color:0x4f8d52,roughness:1}),cx,cz,.01);for(let t=0;t<7;t++)addTree(cx+(seedRand()-.5)*(BLOCK-9),cz+(seedRand()-.5)*(BLOCK-9),.85+seedRand()*.5);continue}
+    for(const [ox,oz] of [[-11,-11],[11,-11],[-11,11],[11,11]]){
+      if(seedRand()<.13)continue;
+      const p=prototypes[Math.floor(seedRand()*prototypes.length)].clone(true);
+      const box=new THREE.Box3().setFromObject(p),sz=box.getSize(new THREE.Vector3());
+      p.scale.multiplyScalar((10+seedRand()*6)/Math.max(sz.x,sz.z,1));
+      p.position.set(cx+ox+(seedRand()-.5)*2.6,0,cz+oz+(seedRand()-.5)*2.6);p.rotation.y=Math.floor(seedRand()*4)*Math.PI/2;scene.add(p);count++;
     }
   }
-  await Promise.all(Array.from({length:Math.min(6,selectedNames.length)},()=>worker()));
-  worldInstances=placements.filter(p=>selected.has(p.model)&&meshCache.has(p.model)).map(p=>({
-    mesh:meshCache.get(p.model),
-    model:p.model,
-    matrix:modelMatrix(p.rotation,p.position),
-    position:p.position,
-    color:hashColor(p.model)
-  }));
-  if(worldInstances.length<20) throw new Error(`Poucos DFFs puderam ser convertidos (${worldInstances.length} instâncias). Esta edição do GTA:SA pode usar um formato ainda não suportado.`);
-  worldReady=true;
-  setProgress(`Los Santos pronto: ${worldInstances.length} instâncias usando ${meshCache.size} modelos DFF reais`,1);
-  ui.assetStats.textContent=`${install.img.entries.length.toLocaleString()} entradas IMG · ${install.defs.size.toLocaleString()} definições · ${install.placements.length.toLocaleString()} placements · ${worldInstances.length.toLocaleString()} objetos carregados`;
-  ui.readyBox.classList.remove('hidden');
+  for(let i=-5;i<=5;i++)for(let j=-5;j<=5;j+=2)addLamp(i*ROAD_SPACING+ROAD_WIDTH/2+2,j*ROAD_SPACING+16,Math.PI);
+  ui.assetStats.textContent=`${count} prédios · ${buildingURLs.length} modelos CC0 · mundo 100% original`;
+  setProgress('Cidade pronta. Clique em JOGAR AGORA.',1);ui.joinBtn.disabled=false;
 }
 
-async function loadInstall(candidate){
-  install=candidate;ui.assetBtn.disabled=true;ui.errorBox.classList.add('hidden');
-  await install.initialize(setProgress);
-  await prepareWorld();
-  ui.assetBtn.disabled=false;
+function makeAvatar(color=0x2796e8){
+  const g=new THREE.Group(),mat=new THREE.MeshStandardMaterial({color,roughness:.85}),skin=new THREE.MeshStandardMaterial({color:0xd39a73,roughness:.9});
+  const body=new THREE.Mesh(new THREE.BoxGeometry(.62,.95,.34),mat);body.position.y=1.35;g.add(body);
+  const head=new THREE.Mesh(new THREE.SphereGeometry(.28,12,10),skin);head.position.y=2.02;g.add(head);
+  for(const x of[-.18,.18]){const leg=new THREE.Mesh(new THREE.BoxGeometry(.18,.72,.2),new THREE.MeshStandardMaterial({color:0x26364b}));leg.position.set(x,.48,0);g.add(leg)}
+  return g;
 }
-
-ui.assetBtn.onclick=async()=>{
-  try{await loadInstall(await GTAInstall.pick())}catch(e){fail(e)}
-};
-
-(async()=>{
-  try{
-    const saved=await GTAInstall.restore();
-    if(saved) await loadInstall(saved);
-  }catch(e){console.debug('restore failed',e)}
-})();
-
+function makeCar(color=0xe06a36){
+  const g=new THREE.Group(),bodyMat=new THREE.MeshStandardMaterial({color,metalness:.15,roughness:.55}),glass=new THREE.MeshStandardMaterial({color:0x203a4c,metalness:.15,roughness:.3}),tire=new THREE.MeshStandardMaterial({color:0x121416,roughness:1});
+  const body=new THREE.Mesh(new THREE.BoxGeometry(3.7,.65,1.75),bodyMat);body.position.y=.62;g.add(body);
+  const cabin=new THREE.Mesh(new THREE.BoxGeometry(1.9,.65,1.52),glass);cabin.position.set(-.15,1.15,0);g.add(cabin);
+  for(const x of[-1.18,1.18])for(const z of[-.82,.82]){const w=new THREE.Mesh(new THREE.CylinderGeometry(.32,.32,.22,12),tire);w.rotation.x=Math.PI/2;w.position.set(x,.38,z);g.add(w)}
+  return g;
+}
+const localAvatar=makeAvatar(0x2f95de);scene.add(localAvatar);
+const localCar=makeCar(0xe05d2f);localCar.visible=false;scene.add(localCar);
+const remotes=new Map();
+let ws=null,self=null,token=localStorage.specterToken||null,yaw=Math.PI,pitch=.24,mode='foot',carSpeed=0;
+const players=new Map(),keys=new Set();
+function msg(t){const d=document.createElement('div');d.className='msg';d.textContent=t;ui.messages.append(d);while(ui.messages.children.length>9)ui.messages.firstChild.remove()}
 function connect(name){
-  const proto=location.protocol==='https:'?'wss':'ws';
-  ws=new WebSocket(`${proto}://${location.host}/ws`);
-  ui.net.textContent=' conectando';
+  const proto=location.protocol==='https:'?'wss':'ws';ws=new WebSocket(`${proto}://${location.host}/ws`);ui.net.textContent=' conectando';
   ws.onopen=()=>{ui.net.textContent=' online';ws.send(JSON.stringify({type:'hello',token,name}))};
-  ws.onmessage=e=>{
-    let m;try{m=JSON.parse(e.data)}catch{return}
-    if(m.type==='welcome'){
-      self={...m.self};token=m.token;localStorage.specterToken=token;mode=self.mode||'foot';
-      ui.launcher.classList.add('hidden');ui.hud.classList.remove('hidden');ui.hint.classList.remove('hidden');ui.chat.classList.remove('hidden');
-      msg(`Bem-vindo, ${self.name}`);msg('GTASA local assets: carregados.');
-      canvas.requestPointerLock?.();
-    }else if(m.type==='snapshot'){
-      players.clear();for(const p of m.players)players.set(p.id,p);
-      const me=players.get(self?.id);if(me&&self){Object.assign(self,me);mode=me.mode}
-    }else if(m.type==='chat')msg(`${m.name}: ${m.text}`);
-    else if(m.type==='system')msg(m.text);
+  ws.onmessage=e=>{let m;try{m=JSON.parse(e.data)}catch{return}
+    if(m.type==='welcome'){self={...m.self};token=m.token;localStorage.specterToken=token;mode=self.mode||'foot';ui.launcher.classList.add('hidden');ui.hud.classList.remove('hidden');ui.hint.classList.remove('hidden');ui.chat.classList.remove('hidden');msg(`Bem-vindo, ${self.name}`);canvas.requestPointerLock?.()}
+    else if(m.type==='snapshot'){players.clear();for(const p of m.players)players.set(p.id,p);const me=players.get(self?.id);if(me&&self){self.x=me.x;self.z=me.z;self.money=me.money;mode=me.mode||mode}}
+    else if(m.type==='chat')msg(`${m.name}: ${m.text}`);else if(m.type==='system')msg(m.text)
   };
-  ws.onclose=()=>{ui.net.textContent=' offline';if(!ui.launcher.classList.contains('hidden'))return;setTimeout(()=>connect(name),1800)};
+  ws.onclose=()=>{ui.net.textContent=' offline';if(self)setTimeout(()=>connect(name),1800)};
 }
-ui.joinBtn.onclick=()=>{
-  if(!worldReady)return fail(new Error('Carregue primeiro uma instalação válida do GTA San Andreas.'));
-  connect(ui.name.value.trim()||'Player');
-};
-
-addEventListener('keydown',e=>{
-  if(e.target===ui.chatInput)return;
-  if(e.code==='Enter'&&!ui.launcher.classList.contains('hidden'))return;
-  if(e.code==='Enter'){
-    document.exitPointerLock?.();ui.chatInput.style.display='block';ui.chatInput.focus();return;
-  }
-  if(e.code==='KeyE'&&self){mode=mode==='car'?'foot':'car';ws?.send(JSON.stringify({type:'mode',mode}))}
-  keys.add(e.code);
-});
+ui.joinBtn.onclick=()=>connect(ui.name.value.trim()||'Player');
+addEventListener('keydown',e=>{if(e.target===ui.chatInput)return;if(e.code==='Enter'&&self){document.exitPointerLock?.();ui.chatInput.style.display='block';ui.chatInput.focus();return}if(e.code==='KeyE'&&self){mode=mode==='car'?'foot':'car';ws?.send(JSON.stringify({type:'mode',mode}))}keys.add(e.code)});
 addEventListener('keyup',e=>keys.delete(e.code));
-canvas.onclick=()=>{if(self)canvas.requestPointerLock?.()};
-addEventListener('mousemove',e=>{
-  if(document.pointerLockElement!==canvas)return;
-  yaw-=e.movementX*.0024;
-  pitch=Math.max(-0.12,Math.min(0.62,pitch-e.movementY*.0018));
-});
-ui.chatInput.onkeydown=e=>{
-  if(e.key!=='Enter')return;
-  const t=ui.chatInput.value.trim();if(t)ws?.send(JSON.stringify({type:'chat',text:t}));
-  ui.chatInput.value='';ui.chatInput.style.display='none';canvas.requestPointerLock?.();
-};
+canvas.addEventListener('click',()=>self&&canvas.requestPointerLock?.());
+addEventListener('mousemove',e=>{if(document.pointerLockElement!==canvas)return;if(mode==='foot')yaw-=e.movementX*.00235;pitch=THREE.MathUtils.clamp(pitch-e.movementY*.0016,-.08,.58)});
+ui.chatInput.onkeydown=e=>{if(e.key==='Enter'){const t=ui.chatInput.value.trim();if(t)ws?.send(JSON.stringify({type:'chat',text:t}));ui.chatInput.value='';ui.chatInput.style.display='none';canvas.requestPointerLock?.()}};
 setInterval(()=>{
   if(!self||ws?.readyState!==1)return;
-  ws.send(JSON.stringify({
-    type:'input',
-    f:(keys.has('KeyW')?1:0)-(keys.has('KeyS')?1:0),
-    r:(keys.has('KeyD')?1:0)-(keys.has('KeyA')?1:0),
-    sprint:keys.has('ShiftLeft')||keys.has('ShiftRight'),yaw
-  }));
+  let f=(keys.has('KeyW')?1:0)-(keys.has('KeyS')?1:0),r=(keys.has('KeyD')?1:0)-(keys.has('KeyA')?1:0);
+  if(mode==='car'){carSpeed+=f*.065;carSpeed*=.965;carSpeed=THREE.MathUtils.clamp(carSpeed,-.52,1);yaw-=r*.038*Math.max(.18,Math.abs(carSpeed))*Math.sign(carSpeed||1);f=carSpeed;r=0}
+  ws.send(JSON.stringify({type:'input',f,r,sprint:keys.has('ShiftLeft'),yaw}));
 },50);
-
-function worldPlayerPos(p){
-  return [SPAWN[0]+(p?.x||0),SPAWN[1],SPAWN[2]+(p?.z||0)];
-}
-function drawMesh(mesh,matrix,color){
-  gl.uniformMatrix4fv(U.model,false,matrix);gl.uniform3fv(U.color,color);
-  gl.bindVertexArray(mesh.vao);gl.drawElements(gl.TRIANGLES,mesh.count,mesh.type,0);
-}
-let frames=0,lastFps=performance.now(),fps=0;
-function render(now){
-  const d=Math.min(devicePixelRatio||1,1.5),w=Math.max(1,Math.floor(innerWidth*d)),h=Math.max(1,Math.floor(innerHeight*d));
-  if(canvas.width!==w||canvas.height!==h){canvas.width=w;canvas.height=h;gl.viewport(0,0,w,h)}
-  gl.enable(gl.DEPTH_TEST);gl.depthFunc(gl.LEQUAL);gl.disable(gl.CULL_FACE);
-  gl.clearColor(.48,.68,.82,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
-
-  const me=worldPlayerPos(self);
-  const target=[me[0],me[1]+1.7,me[2]];
-  const dist=mode==='car'?15:11;
-  const cp=Math.cos(pitch);
-  const eye=[
-    target[0]-Math.sin(yaw)*cp*dist,
-    target[1]+Math.sin(pitch)*dist+3.0,
-    target[2]-Math.cos(yaw)*cp*dist
-  ];
-  const vp=mul(perspective(Math.PI/3,w/h,.25,1300),lookAt(eye,target));
-  gl.useProgram(prog);gl.uniformMatrix4fv(U.vp,false,vp);gl.uniform3fv(U.eye,eye);
-
-  if(worldReady){
-    const cull2=900*900;
-    for(const inst of worldInstances){
-      const dx=inst.position[0]-me[0],dz=inst.position[2]-me[2];
-      if(dx*dx+dz*dz>cull2)continue;
-      drawMesh(inst.mesh,inst.matrix,inst.color);
-    }
-  }
-
+function syncRemote(){
+  const live=new Set();
   for(const p of players.values()){
-    const wp=worldPlayerPos(p),isMe=p.id===self?.id;
-    const scale=p.mode==='car'?[1.8,.55,.9]:[.38,1,.38];
-    const pos=[wp[0],wp[1]+scale[1],wp[2]];
-    drawMesh(playerMesh,identityAt(pos,scale),isMe?[.95,.72,.12]:[.12,.42,.86]);
+    if(p.id===self?.id)continue;live.add(p.id);let item=remotes.get(p.id);
+    if(!item){item={foot:makeAvatar(0x347ad3),car:makeCar(0x3a78d6)};scene.add(item.foot,item.car);remotes.set(p.id,item)}
+    const isCar=p.mode==='car';item.foot.visible=!isCar;item.car.visible=isCar;const obj=isCar?item.car:item.foot;obj.position.set(p.x,0,p.z);obj.rotation.y=p.yaw||0;
   }
-
-  frames++;if(now-lastFps>500){fps=Math.round(frames*1000/(now-lastFps));frames=0;lastFps=now}
-  if(self)ui.stats.textContent=`$${self.money??500} · ${mode.toUpperCase()} · ${players.size} player${players.size===1?'':'s'} · ${fps} FPS · ${worldInstances.length} GTASA inst`;
-  requestAnimationFrame(render);
+  for(const [id,item] of remotes)if(!live.has(id)){scene.remove(item.foot,item.car);remotes.delete(id)}
 }
-requestAnimationFrame(render);
-
-console.info(LEGAL_NOTE);
+const clock=new THREE.Clock();
+function animate(){
+  requestAnimationFrame(animate);const dt=Math.min(clock.getDelta(),.05),x=self?.x||0,z=self?.z||0;
+  localAvatar.visible=!!self&&mode==='foot';localCar.visible=!!self&&mode==='car';const local=mode==='car'?localCar:localAvatar;local.position.set(x,0,z);local.rotation.y=yaw;syncRemote();
+  const dist=mode==='car'?10:7.2,h=mode==='car'?4.8:3.9,back=new THREE.Vector3(Math.sin(yaw)*dist,0,Math.cos(yaw)*dist),desired=new THREE.Vector3(x-back.x,h+pitch*7,z-back.z);
+  camera.position.lerp(desired,1-Math.pow(.001,dt));camera.lookAt(x,1.25+pitch*1.7,z);
+  ui.stats.textContent=`$${self?.money??500} · ${mode.toUpperCase()} · ${players.size} online · ${Math.round(renderer.info.render.triangles/1000)}k tris`;
+  renderer.render(scene,camera);
+}
+animate();
+addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setPixelRatio(Math.min(devicePixelRatio||1,1.5));renderer.setSize(innerWidth,innerHeight,false)});
+buildCity().catch(e=>{console.error(e);setProgress('Falha ao carregar assets externos; usando cidade procedural.',1);ui.joinBtn.disabled=false;ui.assetStats.textContent='Modo fallback procedural ativo.'});
