@@ -1,12 +1,16 @@
 {
   "name": "specter-browser-rp",
-  "version": "0.1.1",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "description": "Clean-room browser open-world RP prototype using WebGL2, WebSockets and SQLite.",
+  "description": "Persistent browser open-world RP with physics, vehicles and autonomous NPC simulation.",
   "scripts": {
     "start": "node --experimental-sqlite server.mjs",
     "test": "node --experimental-sqlite --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "cannon-es": "0.20.0",
+    "three": "0.185.0"
   },
   "engines": {
     "node": ">=22.5.0"

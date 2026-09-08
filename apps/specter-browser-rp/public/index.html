@@ -2,51 +2,25 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#0d1117">
-  <title>SPECTER West Coast RP</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+  <meta name="theme-color" content="#0b0d12">
+  <title>SPECTER West Coast RP — WorldMind</title>
   <link rel="stylesheet" href="/style.css">
+  <script type="importmap">{"imports":{"three":"/vendor/three/build/three.module.js","cannon-es":"/vendor/cannon-es/dist/cannon-es.js"}}</script>
 </head>
 <body>
   <canvas id="game"></canvas>
-
+  <div id="loading"><div class="loaderCard"><b>WORLD//MIND</b><h1>SPECTER WEST COAST</h1><div class="bar"><i id="loadBar"></i></div><span id="loadText">Inicializando física…</span></div></div>
   <div id="hud" class="hidden">
-    <b>SPECTER WEST COAST RP</b><span id="net"> offline</span>
-    <div id="stats">$500 · FOOT · 0 online</div>
+    <div class="brand">SPECTER <b>WEST COAST</b><small>WORLD//MIND v0.3</small></div>
+    <div id="stats">FOOT · 0 km/h</div>
+    <div class="meters"><span>VIDA <i></i></span><span>ENERGIA <i></i></span></div>
   </div>
-  <div id="hint" class="hidden">WASD mover · mouse câmera · Shift correr · E entrar/sair do carro · Enter chat · Esc solta mouse</div>
-
-  <div id="chat" class="hidden">
-    <div id="messages"></div>
-    <input id="chatInput" maxlength="180" placeholder="Chat, /save ou /car">
-  </div>
-
-  <div id="launcher">
-    <div class="card">
-      <div class="tag">OPEN-WORLD RP · WEBGL · MULTIPLAYER</div>
-      <h1>SPECTER West Coast</h1>
-      <p class="lead">Nosso próprio sandbox urbano inspirado na era dos jogos open-world de PS2: cidade grande, ruas, bairros, carros e multiplayer — sem precisar instalar ou selecionar arquivos do GTA.</p>
-
-      <div class="featuregrid">
-        <div><b>100% direto no site</b><small>Os assets livres são carregados da web e o mundo abre no navegador.</small></div>
-        <div><b>Assets CC0</b><small>Prédios Kenney e conteúdo original/procedural, liberados para redistribuição.</small></div>
-        <div><b>Servidor RP online</b><small>WebSocket autoritativo, chat, persistência e jogadores sincronizados.</small></div>
-        <div><b>Leve</b><small>Geometria low-poly, fog, cache do navegador e resolução limitada.</small></div>
-      </div>
-
-      <div class="loadingbox">
-        <div class="progress"><i id="progressBar"></i></div>
-        <div id="loadState">Inicializando cidade…</div>
-        <div id="assetStats"></div>
-      </div>
-
-      <input id="name" maxlength="24" value="Player" autocomplete="off" aria-label="Nome do jogador">
-      <button id="joinBtn" class="primary" disabled>JOGAR AGORA</button>
-
-      <p class="legal">Engine do cliente: Three.js (MIT). Prédios: Kenney City Kit Suburban (CC0 1.0) via coleção pública CC0. Estradas, personagem, veículo e layout: código original. Nenhum asset ou código proprietário do GTA San Andreas é distribuído.</p>
-    </div>
-  </div>
-
+  <canvas id="minimap" class="hidden" width="190" height="190"></canvas>
+  <div id="prompt" class="hidden"></div>
+  <div id="hint" class="hidden">WASD mover · mouse câmera · Shift correr · Espaço pular · E veículo · F falar · B construir · R resetar carro · Enter chat</div>
+  <div id="chat" class="hidden"><div id="messages"></div><input id="chatInput" maxlength="220" placeholder="Digite e pressione Enter"></div>
+  <div id="join" class="hidden"><div class="joinCard"><div class="eyebrow">PERSISTENT AUTONOMOUS WORLD</div><h1>West Coast está viva.</h1><p>NPCs trabalham, lembram, acumulam recursos e constroem permanentemente no mundo. Entre e veja o que mudou.</p><label>Seu nome<input id="name" maxlength="24" value="Player" autocomplete="off"></label><button id="joinBtn">ENTRAR NO MUNDO</button><small>Three.js + cannon-es · WebSocket · mundo persistente · assets CC0</small></div></div>
   <script type="module" src="/client.js"></script>
 </body>
 </html>

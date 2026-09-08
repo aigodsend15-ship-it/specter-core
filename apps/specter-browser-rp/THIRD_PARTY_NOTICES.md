@@ -1,26 +1,29 @@
-# Third-party notices
+# Third-party notices — SPECTER West Coast RP
 
-## Three.js
+This project does not distribute Rockstar Games assets.
 
-The browser client loads Three.js from esm.sh at runtime.
+## Kenney Car Kit / City assets
 
-Upstream: https://github.com/mrdoob/three.js
-License: MIT
+Runtime visual assets are loaded from the public `Arslan12216775/kenney_car-kit` mirror of Kenney's Car Kit / city-compatible assets. Kenney Car Kit is distributed under Creative Commons Zero (CC0 1.0). Asset credit is appreciated but not required by the license.
 
-## Kenney City Kit Suburban
+Source used by the runtime: https://github.com/Arslan12216775/kenney_car-kit
+Kenney: https://kenney.nl/
+CC0: https://creativecommons.org/publicdomain/zero/1.0/
 
-The city loads a curated subset of GLB building models from the public `petroulacl/fps-buildings-env-kit` mirror. The included source pack is Kenney City Kit Suburban 2.0.
+## three.js
 
-Original creator/distributor: Kenney — https://kenney.nl/
-Mirror used by the runtime: https://github.com/petroulacl/fps-buildings-env-kit
-License: Creative Commons Zero (CC0 1.0 Universal)
+three.js is MIT licensed. https://github.com/mrdoob/three.js
 
-The source `License.txt` states that the content may be used for personal, educational, and commercial purposes, and attribution is optional.
+## cannon-es
 
-## Project-created content
+cannon-es is MIT licensed. https://github.com/pmndrs/cannon-es
 
-Road layout, road/curb/lane geometry, parks, trees, lamp posts, player avatar, vehicle mesh, camera/controller code, multiplayer integration, and world generation are original project code/content.
+## SanAndreasUnity compatibility research
 
-## GTA / Rockstar assets
+`public/gtasa-loader.js` remains as an optional compatibility bridge for legally supplied GTA San Andreas classic-PC files. Portions of its file-format logic were independently ported from SanAndreasUnity (MIT), especially IMG VER2, binary IPL and RenderWare geometry structures.
 
-No GTA San Andreas model, texture, audio, map, executable code, `gta3.img`, or other proprietary Rockstar/Take-Two game asset is distributed or fetched by the current web client.
+Upstream: https://github.com/in0finite/SanAndreasUnity
+
+## Rockstar Games assets
+
+No GTA San Andreas models, textures, audio, maps, executable code, `gta3.img`, or other proprietary Rockstar/Take-Two assets are included or fetched by this repository. A future private deployment may point the compatibility bridge at assets the operator is authorized to host.

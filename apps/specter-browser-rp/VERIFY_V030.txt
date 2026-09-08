@@ -1,0 +1,9 @@
+BEGIN VERIFY v0.3.0
+node --check server.mjs: PASS
+node --check public/client.js: PASS
+node --check src/persistence.mjs: PASS
+node --experimental-sqlite --test tests/*.test.mjs: 1/1 PASS
+GET /health local smoke: PASS
+WebSocket hello/welcome local smoke: PASS
+NPC seed count: 12
+END VERIFY
