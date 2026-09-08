@@ -37,6 +37,17 @@ const bridgeTarget = join(work, 'apps', 'web', 'src', 'ui', 'worldmind-agent-bui
 mkdirSync(dirname(bridgeTarget), { recursive: true });
 cpSync(bridgeSource, bridgeTarget);
 
+// OpenSA intentionally targets a pre-ES2022 library. Keep the injected bridge compatible
+// instead of widening the entire engine's JS target for one Array.prototype.at call.
+let bridge = readFileSync(bridgeTarget, 'utf8');
+bridge = replaceOnce(
+  bridge,
+  '    const record = records.at(-1);',
+  '    const record = records.length > 0 ? records[records.length - 1] : undefined;',
+  'worldmind ES target compatibility',
+);
+writeFileSync(bridgeTarget, bridge);
+
 const hostFile = join(work, 'apps', 'web', 'src', 'ui', 'engine-canvas-host.tsx');
 let host = readFileSync(hostFile, 'utf8');
 host = replaceOnce(
@@ -60,8 +71,9 @@ host = replaceOnce(
 writeFileSync(hostFile, host);
 
 const sourceSha = createHash('sha256').update(readFileSync(bridgeSource)).digest('hex');
+const injectedSha = createHash('sha256').update(bridge).digest('hex');
 const patchedSha = createHash('sha256').update(host).digest('hex');
-console.log(JSON.stringify({ event: 'worldmind_patch', sourceCommit, bridgeSha256: sourceSha, hostSha256: patchedSha }));
+console.log(JSON.stringify({ event: 'worldmind_patch', sourceCommit, bridgeSourceSha256: sourceSha, bridgeInjectedSha256: injectedSha, hostSha256: patchedSha }));
 
 run('npm', ['ci'], work);
 run('npm', ['run', 'build:prod'], work);
