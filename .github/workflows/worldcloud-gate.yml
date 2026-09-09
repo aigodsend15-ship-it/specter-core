@@ -36,7 +36,25 @@ jobs:
           node -e "JSON.parse(require('node:fs').readFileSync('apps/opensa-worldmind-host/worldcloud/agent-policy.json','utf8')); console.log('agent_policy_json_ok')"
 
       - name: Type-check WorldMind Supabase Edge Function
-        run: deno check apps/opensa-worldmind-host/worldcloud/functions/world-agent/index.ts
+        id: edgecheck
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -o pipefail
+          deno check apps/opensa-worldmind-host/worldcloud/functions/world-agent/index.ts 2>&1 | tee edge-check.log
+
+      - name: Preserve Edge Function diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: worldcloud-edge-check
+          path: edge-check.log
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Enforce Edge Function type-check
+        if: steps.edgecheck.outcome != 'success'
+        run: exit 1
 
       - name: Build WebGPU + WebGL2 WorldCloud
         working-directory: apps/opensa-worldmind-host
