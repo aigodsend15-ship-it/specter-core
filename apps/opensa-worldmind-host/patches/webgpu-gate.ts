@@ -84,6 +84,6 @@ export async function probeWebGpu(
 /** What the terminal fallback screen says when neither WebGPU nor WebGL2 is available. */
 export function webGpuGateMessage(probe: 'no-adapter' | 'no-api'): string {
   return probe === 'no-api'
-    ? 'This browser exposes neither a usable WebGPU adapter nor WebGL2. The game cannot create a graphics context on this device.'
-    : 'WebGPU core and compatibility mode were both refused, and WebGL2 is unavailable. Update the GPU driver or use a browser/device with WebGL2 support.';
+    ? 'This browser exposes neither WebGPU nor WebGL2. Please use a recent Chrome or Edge, or another browser/device with WebGL2 support.'
+    : 'WebGPU core and compatibility adapters were both refused and WebGL2 is unavailable. This is usually a GPU driver blocklist or browser flags issue (also common on older Intel hardware and Android).';
 }
