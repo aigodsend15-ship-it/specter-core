@@ -9,6 +9,7 @@ const hostRoot = resolve(here, '..');
 const work = join(hostRoot, '.opensa');
 const sourceRepo = process.env.OPENSA_REPO ?? 'https://github.com/AlexSergey/opensa-fork-notice.git';
 const sourceCommit = process.env.OPENSA_COMMIT ?? '2ba79d93d7bb08fd59aed298310e58870b004d38';
+const renderHost = process.env.OPENSA_ALLOWED_HOST ?? 'specter-gtasa-worldmind.onrender.com';
 
 function run(command, args, cwd = hostRoot) {
   const result = spawnSync(command, args, {
@@ -70,14 +71,27 @@ host = replaceOnce(
 );
 writeFileSync(hostFile, host);
 
+// Vite 8 rejects unknown Host headers by default. Render forwards the public .onrender.com
+// hostname, so explicitly allow only that deployment hostname rather than disabling host checks.
+const viteFile = join(work, 'vite.config.ts');
+let vite = readFileSync(viteFile, 'utf8');
+vite = replaceOnce(
+  vite,
+  'export default defineConfig(({ command }) => ({\n  build: {',
+  `export default defineConfig(({ command }) => ({\n  server: { allowedHosts: [${JSON.stringify(renderHost)}] },\n  preview: { allowedHosts: [${JSON.stringify(renderHost)}] },\n  build: {`,
+  'Render Vite allowed host',
+);
+writeFileSync(viteFile, vite);
+
 const sourceSha = createHash('sha256').update(readFileSync(bridgeSource)).digest('hex');
 const injectedSha = createHash('sha256').update(bridge).digest('hex');
 const patchedSha = createHash('sha256').update(host).digest('hex');
-console.log(JSON.stringify({ event: 'worldmind_patch', sourceCommit, bridgeSourceSha256: sourceSha, bridgeInjectedSha256: injectedSha, hostSha256: patchedSha }));
+const viteSha = createHash('sha256').update(vite).digest('hex');
+console.log(JSON.stringify({ event: 'worldmind_patch', sourceCommit, renderHost, bridgeSourceSha256: sourceSha, bridgeInjectedSha256: injectedSha, hostSha256: patchedSha, viteSha256: viteSha }));
 
 run('npm', ['ci'], work);
 run('npm', ['run', 'build:prod'], work);
 
 const dist = join(work, 'dist');
 if (!existsSync(dist)) throw new Error(`OpenSA build finished without dist at ${dist}`);
-console.log(JSON.stringify({ event: 'worldmind_build_ok', sourceCommit, dist }));
+console.log(JSON.stringify({ event: 'worldmind_build_ok', sourceCommit, renderHost, dist }));
