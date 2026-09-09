@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 const sourceDir = resolve(process.argv[2] ?? '');
 if (!process.argv[2]) {
@@ -24,10 +24,7 @@ for (const group of Object.values(manifest.chunks ?? {})) {
   for (const chunk of group) expected.set(chunk.file, chunk);
 }
 
-const files = readdirSync(sourceDir)
-  .filter((name) => name.endsWith('.zip'))
-  .sort();
-
+const files = readdirSync(sourceDir).filter((name) => name.endsWith('.zip')).sort();
 if (files.length !== expected.size) {
   throw new Error(`manifest/files mismatch: ${expected.size} chunks declared, ${files.length} zip files present`);
 }
@@ -38,42 +35,22 @@ for (const file of files) {
   const absolute = join(sourceDir, file);
   const bytes = statSync(absolute).size;
   if (bytes !== meta.bytes) throw new Error(`byte mismatch for ${file}: manifest=${meta.bytes}, disk=${bytes}`);
-  if (bytes > maxObjectBytes) {
-    throw new Error(`${file} is ${bytes} bytes; exceeds configured storage ceiling ${maxObjectBytes}`);
-  }
+  if (bytes > maxObjectBytes) throw new Error(`${file} is ${bytes} bytes; exceeds storage ceiling ${maxObjectBytes}`);
   const hash = createHash('sha1').update(readFileSync(absolute)).digest('hex').slice(0, 12);
   if (hash !== meta.hash || !file.includes(hash)) throw new Error(`content hash mismatch for ${file}`);
 }
 
 const manifestSha256 = createHash('sha256').update(manifestBytes).digest('hex');
-console.log(JSON.stringify({
-  event: 'worldcloud_publish_plan',
-  bucket,
-  prefix,
-  chunks: files.length,
-  manifestSha256,
-  maxObjectBytes,
-  concurrency,
-}));
+console.log(JSON.stringify({ event: 'worldcloud_publish_plan', bucket, prefix, chunks: files.length, manifestSha256, maxObjectBytes, concurrency }));
 
 // Two-phase publication: immutable content-addressed chunks first, mutable manifest last.
-// A browser can therefore never observe a manifest pointing at chunks that were not uploaded yet.
 await mapLimit(files, concurrency, async (file) => {
-  const bytes = readFileSync(join(sourceDir, file));
-  await upload(`${prefix}/${file}`, bytes, 'application/zip', '31536000', false);
+  await upload(`${prefix}/${file}`, readFileSync(join(sourceDir, file)), 'application/zip', '31536000', false);
 });
-
 await upload(`${prefix}/manifest.json`, manifestBytes, 'application/json', '0', true);
 
 const publicManifestUrl = `${supabaseUrl}/storage/v1/object/public/${encodeURIComponent(bucket)}/${encodePath(`${prefix}/manifest.json`)}`;
-console.log(JSON.stringify({
-  event: 'worldcloud_publish_ok',
-  bucket,
-  prefix,
-  chunks: files.length,
-  manifestSha256,
-  publicManifestUrl,
-}));
+console.log(JSON.stringify({ event: 'worldcloud_publish_ok', bucket, prefix, chunks: files.length, manifestSha256, publicManifestUrl }));
 
 async function upload(objectPath, bytes, contentType, cacheControl, upsert) {
   const url = `${supabaseUrl}/storage/v1/object/${encodeURIComponent(bucket)}/${encodePath(objectPath)}`;
@@ -81,7 +58,7 @@ async function upload(objectPath, bytes, contentType, cacheControl, upsert) {
     apikey: serviceKey,
     Authorization: `Bearer ${serviceKey}`,
     'Content-Type': contentType,
-    'cache-control': `max-age=${cacheControl}`,
+    'cache-control': cacheControl,
     'x-upsert': upsert ? 'true' : 'false',
   };
 
@@ -107,8 +84,9 @@ async function upload(objectPath, bytes, contentType, cacheControl, upsert) {
         return;
       }
       const text = await response.text();
-      if (!upsert && response.status === 409) {
-        console.log(JSON.stringify({ event: 'worldcloud_upload_skip', object: objectPath, reason: 'conflict_exists' }));
+      const duplicate = !upsert && (response.status === 409 || (response.status === 400 && /duplicate|already exists/i.test(text)));
+      if (duplicate) {
+        console.log(JSON.stringify({ event: 'worldcloud_upload_skip', object: objectPath, reason: 'already_exists' }));
         return;
       }
       last = new Error(`upload ${objectPath} failed ${response.status}: ${text.slice(0, 300)}`);
@@ -133,25 +111,8 @@ async function mapLimit(items, limit, fn) {
   await Promise.all(workers);
 }
 
-function encodePath(path) {
-  return path.split('/').map(encodeURIComponent).join('/');
-}
-
-function trimSlashes(value) {
-  return value.replace(/^\/+|\/+$/g, '');
-}
-
-function mustEnv(name) {
-  const value = process.env[name];
-  if (!value) throw new Error(`${name} is required`);
-  return value;
-}
-
-function clamp(value, min, max) {
-  if (!Number.isFinite(value)) return min;
-  return Math.max(min, Math.min(max, Math.trunc(value)));
-}
-
-function sleep(ms) {
-  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
-}
+function encodePath(path) { return path.split('/').map(encodeURIComponent).join('/'); }
+function trimSlashes(value) { return value.replace(/^\/+|\/+$/g, ''); }
+function mustEnv(name) { const value = process.env[name]; if (!value) throw new Error(`${name} is required`); return value; }
+function clamp(value, min, max) { if (!Number.isFinite(value)) return min; return Math.max(min, Math.min(max, Math.trunc(value))); }
+function sleep(ms) { return new Promise((resolveSleep) => setTimeout(resolveSleep, ms)); }
