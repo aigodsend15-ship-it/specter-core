@@ -13,6 +13,7 @@ const sourceCommit = process.env.OPENSA_COMMIT ?? '2ba79d93d7bb08fd59aed298310e5
 // Last commit before OpenSA deleted its Three/WebGL renderer (074/13 phase 5).
 const legacyCommit = process.env.OPENSA_LEGACY_COMMIT ?? 'cacc1f0b8332d3d96490e593f95c02e2ab23b1a7';
 const renderHost = process.env.OPENSA_ALLOWED_HOST ?? 'specter-gtasa-worldmind.onrender.com';
+const cloudManifest = process.env.VITE_SPECTER_GAME_MANIFEST ?? '';
 
 function run(command, args, cwd = hostRoot) {
   const result = spawnSync(command, args, {
@@ -61,11 +62,56 @@ function exposeLocalSanAndreas(root, label) {
   return sha256(config);
 }
 
+function wireCloudManifest(root, label) {
+  const configFile = join(root, 'apps', 'web', 'src', 'game-config.tsx');
+  let config = readFileSync(configFile, 'utf8');
+  config = replaceOnce(
+    config,
+    `  original: {\n    assetLoader: 'local',`,
+    `  original: {\n    assetLoader: import.meta.env.VITE_SPECTER_GAME_MANIFEST ? 'fetch' : 'local',`,
+    `${label} cloud asset-loader switch`,
+  );
+  config = replaceOnce(
+    config,
+    `label: 'Run GTA San Andreas [select game folder]'`,
+    `label: import.meta.env.VITE_SPECTER_GAME_MANIFEST ? 'Run SPECTER Cloud World' : 'Run GTA San Andreas [select game folder]'`,
+    `${label} cloud menu label`,
+  );
+  writeFileSync(configFile, config);
+
+  const bootFile = join(root, 'apps', 'web', 'src', 'ui', 'shell', 'use-asset-boot.ts');
+  let boot = readFileSync(bootFile, 'utf8');
+  boot = replaceOnce(
+    boot,
+    'manifestUrl: `${BASE}/games/${state.game}-${__APP_VERSION__}/manifest.json`,',
+    'manifestUrl: import.meta.env.VITE_SPECTER_GAME_MANIFEST || `${BASE}/games/${state.game}-${__APP_VERSION__}/manifest.json`,',
+    `${label} cloud manifest URL`,
+  );
+  writeFileSync(bootFile, boot);
+
+  const appFile = join(root, 'apps', 'web', 'src', 'ui', 'shell', 'app.tsx');
+  let app = readFileSync(appFile, 'utf8');
+  app = replaceOnce(
+    app,
+    `  useEffect(() => {\n    initAnalytics();\n  }, []);`,
+    `  useEffect(() => {\n    initAnalytics();\n  }, []);\n\n  // WorldCloud: when a promoted packed world manifest is configured, boot it directly.\n  // Without the env var the existing local-folder flow remains unchanged.\n  useEffect(() => {\n    if (!import.meta.env.VITE_SPECTER_GAME_MANIFEST) {\n      return;\n    }\n    if (boot.state.phase === 'menu') {\n      boot.play('original');\n    } else if (boot.state.phase === 'disclaimer') {\n      boot.acceptDisclaimer();\n    }\n  }, [boot.state.phase, boot.play, boot.acceptDisclaimer]);`,
+    `${label} cloud autostart`,
+  );
+  writeFileSync(appFile, app);
+
+  return {
+    appSha256: sha256(app),
+    bootSha256: sha256(boot),
+    configSha256: sha256(config),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Modern WebGPU build: WorldMind + Core -> Compatibility graphics ladder.
 // ---------------------------------------------------------------------------
 cloneAt(sourceCommit, work);
-const modernGameConfigSha256 = exposeLocalSanAndreas(work, 'modern');
+exposeLocalSanAndreas(work, 'modern');
+const modernCloud = wireCloudManifest(work, 'modern');
 
 const bridgeSource = join(hostRoot, 'patches', 'worldmind-agent-build.ts');
 const bridgeTarget = join(work, 'apps', 'web', 'src', 'ui', 'worldmind-agent-build.ts');
@@ -158,7 +204,8 @@ console.log(
     sourceCommit,
     legacyCommit,
     renderHost,
-    modernGameConfigSha256,
+    cloudManifestConfigured: Boolean(cloudManifest),
+    modernCloud,
     worldMindSha256: sha256(bridge),
     graphicsGateSha256: sha256(readFileSync(graphicsGateTarget)),
     appSha256: sha256(app),
@@ -177,7 +224,8 @@ if (!existsSync(dist)) throw new Error(`OpenSA build finished without dist at ${
 // Legacy WebGL2 build: exact pre-deletion Three/WebGL renderer, isolated under /legacy/.
 // ---------------------------------------------------------------------------
 cloneAt(legacyCommit, legacyWork);
-const legacyGameConfigSha256 = exposeLocalSanAndreas(legacyWork, 'legacy');
+exposeLocalSanAndreas(legacyWork, 'legacy');
+const legacyCloud = wireCloudManifest(legacyWork, 'legacy');
 
 // Force the historical Three/WebGL host. That commit already kept this renderer behind ?engine=three;
 // making the legacy bundle unconditional prevents another WebGPU probe after the modern shell redirected.
@@ -219,8 +267,9 @@ writeFileSync(
       sourceCommit,
       legacyCommit,
       renderHost,
-      modernGameConfigSha256,
-      legacyGameConfigSha256,
+      cloudManifestConfigured: Boolean(cloudManifest),
+      modernCloud,
+      legacyCloud,
     },
     null,
     2,
@@ -235,8 +284,9 @@ console.log(
     renderHost,
     dist,
     legacyOut,
-    modernGameConfigSha256,
-    legacyGameConfigSha256,
+    cloudManifestConfigured: Boolean(cloudManifest),
+    modernCloud,
+    legacyCloud,
     order: ['webgpu-core', 'webgpu-compatibility', 'webgl2-three'],
   }),
 );
