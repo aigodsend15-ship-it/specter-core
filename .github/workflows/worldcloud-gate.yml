@@ -28,6 +28,8 @@ jobs:
         run: |
           node --check apps/opensa-worldmind-host/scripts/build.mjs
           node --check apps/opensa-worldmind-host/scripts/generate-world-index.mjs
+          node --check apps/opensa-worldmind-host/scripts/repack-for-supabase.mjs
+          node --check apps/opensa-worldmind-host/scripts/publish-supabase.mjs
           node -e "JSON.parse(require('node:fs').readFileSync('apps/opensa-worldmind-host/worldcloud/agent-policy.json','utf8')); console.log('agent_policy_json_ok')"
 
       - name: Build WebGPU + WebGL2 WorldCloud
