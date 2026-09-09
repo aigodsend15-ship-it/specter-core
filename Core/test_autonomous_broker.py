@@ -59,6 +59,20 @@ class BrokerTests(unittest.TestCase):
         with self.broker.connection() as con:
             self.assertEqual(con.execute('SELECT count(*) FROM broker_evidence').fetchone()[0], 0)
 
+    def test_event_bus_failure_is_advisory(self):
+        class FailingBus:
+            def push(self, *args, **kwargs):
+                raise RuntimeError('event bus unavailable')
+
+        broker = Broker(self.db, event_bus=FailingBus())
+        task = broker.submit('durable despite advisory failure')
+        asyncio.run(broker.run())
+        self.assertEqual(broker.status(task)['state'], 'ATTAINED')
+        with broker.connection() as con:
+            states = [r[0] for r in con.execute(
+                'SELECT state FROM broker_events WHERE task_id=? ORDER BY seq', (task,))]
+        self.assertEqual(states, ['INIT', 'PLAN', 'EXEC', 'VERIFY', 'ATTAINED'])
+
     def test_exclusive_dispatch(self):
         self.broker.submit('a')
         with exclusive(self.broker.root / 'dispatcher.lock'):

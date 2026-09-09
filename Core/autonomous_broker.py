@@ -150,7 +150,12 @@ class Broker:
                         (row['id'], row['version']+1, state, canonical(detail).decode(), time.time()))
             con.commit()
         # Notifications are advisory; broker_events is the durable source of truth.
-        self.bus.push(2, 'LOCAL_BROKER', state, {'task_id': row['id']})
+        # A notification failure must not turn an already committed transition
+        # into an apparent broker failure or trigger a stale-version rollback path.
+        try:
+            self.bus.push(2, 'LOCAL_BROKER', state, {'task_id': row['id']})
+        except Exception:
+            pass
         return self.status(row['id'])
 
     def files(self, task_id):
