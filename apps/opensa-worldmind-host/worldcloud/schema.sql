@@ -1,5 +1,5 @@
 -- SPECTER WorldCloud v1 persistence schema (PostgreSQL / Supabase compatible)
--- Base assets stay immutable in object storage. This database stores the live, auditable world overlay.
+-- Base assets are immutable in object storage. This database is the auditable live-world control plane.
 
 create extension if not exists pgcrypto;
 
@@ -7,7 +7,7 @@ create table if not exists world_revisions (
   id uuid primary key default gen_random_uuid(),
   parent_id uuid references world_revisions(id),
   revision_no bigint generated always as identity unique,
-  status text not null check (status in ('proposed','validating','promoted','rejected','rolled_back')),
+  status text not null check (status in ('proposed','validating','candidate','promoted','superseded','rejected','rolled_back')),
   manifest_path text,
   manifest_sha256 text check (manifest_sha256 is null or manifest_sha256 ~ '^[0-9a-f]{64}$'),
   created_by text not null,
@@ -18,6 +18,13 @@ create table if not exists world_revisions (
 
 create unique index if not exists one_promoted_revision
   on world_revisions ((status)) where status = 'promoted';
+
+create table if not exists world_runtime (
+  singleton boolean primary key default true check (singleton),
+  current_revision_id uuid references world_revisions(id),
+  updated_at timestamptz not null default now()
+);
+insert into world_runtime(singleton) values (true) on conflict (singleton) do nothing;
 
 create table if not exists world_agents (
   id text primary key,
@@ -47,11 +54,11 @@ create table if not exists world_mutations (
   accepted boolean not null default false,
   created_at timestamptz not null default now()
 );
-
 create index if not exists world_mutations_revision_idx on world_mutations(revision_id);
 create index if not exists world_mutations_agent_idx on world_mutations(agent_id, created_at desc);
 create index if not exists world_mutations_object_idx on world_mutations(object_key);
 
+-- Materialized current object state. Historical truth lives in world_mutations + immutable manifests.
 create table if not exists world_objects (
   id uuid primary key default gen_random_uuid(),
   stable_key text not null unique,
@@ -66,9 +73,19 @@ create table if not exists world_objects (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-
 create index if not exists world_objects_revision_idx on world_objects(revision_id);
 create index if not exists world_objects_owner_idx on world_objects(owner_agent_id);
+
+create table if not exists world_validation_runs (
+  id uuid primary key default gen_random_uuid(),
+  revision_id uuid not null references world_revisions(id) on delete cascade,
+  gate text not null,
+  passed boolean not null,
+  metrics jsonb not null default '{}'::jsonb,
+  evidence_sha256 text check (evidence_sha256 is null or evidence_sha256 ~ '^[0-9a-f]{64}$'),
+  created_at timestamptz not null default now(),
+  unique(revision_id, gate)
+);
 
 create table if not exists agent_memories (
   id bigint generated always as identity primary key,
@@ -80,7 +97,6 @@ create table if not exists agent_memories (
   created_at timestamptz not null default now(),
   expires_at timestamptz
 );
-
 create index if not exists agent_memories_agent_idx on agent_memories(agent_id, created_at desc);
 
 create table if not exists agent_projects (
@@ -97,6 +113,15 @@ create table if not exists agent_projects (
   updated_at timestamptz not null default now()
 );
 
+-- Replay protection for trusted agent proposals. Old nonces can be pruned after their timestamp window.
+create table if not exists agent_nonces (
+  agent_id text not null references world_agents(id) on delete cascade,
+  nonce text not null,
+  created_at timestamptz not null default now(),
+  primary key(agent_id, nonce)
+);
+create index if not exists agent_nonces_created_idx on agent_nonces(created_at);
+
 create table if not exists world_events (
   id bigint generated always as identity primary key,
   event_type text not null,
@@ -105,29 +130,80 @@ create table if not exists world_events (
   payload jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
-
 create index if not exists world_events_created_idx on world_events(created_at desc);
 
--- RLS: public clients may observe promoted world state, never mutate it directly.
+-- Atomic promotion. A candidate becomes the sole promoted revision; the previous promoted revision is retained as superseded.
+create or replace function promote_world_revision(p_revision uuid)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_status text;
+begin
+  perform pg_advisory_xact_lock(hashtext('specter-world-promotion'));
+  select status into v_status from world_revisions where id = p_revision for update;
+  if v_status is null then raise exception 'revision_not_found'; end if;
+  if v_status <> 'candidate' then raise exception 'revision_not_candidate'; end if;
+  if exists (
+    select 1 from (
+      values ('schema'), ('asset-license'), ('sha256'), ('collision'), ('navmesh'),
+             ('placement-overlap'), ('object-budget'), ('texture-budget'), ('frame-time'), ('rollback')
+    ) as required(gate)
+    where not exists (
+      select 1 from world_validation_runs v
+      where v.revision_id = p_revision and v.gate = required.gate and v.passed
+    )
+  ) then
+    raise exception 'validation_gates_incomplete';
+  end if;
+
+  update world_revisions set status = 'superseded' where status = 'promoted';
+  update world_revisions set status = 'promoted', promoted_at = now() where id = p_revision;
+  update world_runtime set current_revision_id = p_revision, updated_at = now() where singleton;
+  insert into world_events(event_type, revision_id, payload)
+    values ('revision_promoted', p_revision, jsonb_build_object('revision', p_revision));
+  return p_revision;
+end;
+$$;
+revoke all on function promote_world_revision(uuid) from public;
+
+-- RLS: browser clients can observe only the current promoted world. They cannot mutate it.
 alter table world_revisions enable row level security;
+alter table world_runtime enable row level security;
 alter table world_agents enable row level security;
 alter table world_mutations enable row level security;
 alter table world_objects enable row level security;
+alter table world_validation_runs enable row level security;
 alter table agent_memories enable row level security;
 alter table agent_projects enable row level security;
+alter table agent_nonces enable row level security;
 alter table world_events enable row level security;
 
--- Supabase-specific policies. Safe to run there; on plain Postgres these can be omitted.
 do $$
 begin
   if exists (select 1 from pg_roles where rolname = 'anon') then
-    execute $p$create policy "public read promoted revisions" on world_revisions for select to anon using (status = 'promoted')$p$;
-    execute $p$create policy "public read active objects" on world_objects for select to anon using (active = true and revision_id in (select id from world_revisions where status = 'promoted'))$p$;
-    execute $p$create policy "public read enabled agents" on world_agents for select to anon using (enabled = true)$p$;
+    begin
+      create policy "public read current revision" on world_revisions for select to anon
+        using (id = (select current_revision_id from world_runtime where singleton));
+    exception when duplicate_object then null; end;
+    begin
+      create policy "public read runtime pointer" on world_runtime for select to anon using (singleton);
+    exception when duplicate_object then null; end;
+    begin
+      create policy "public read active current objects" on world_objects for select to anon
+        using (active and revision_id = (select current_revision_id from world_runtime where singleton));
+    exception when duplicate_object then null; end;
+    begin
+      create policy "public read enabled agents" on world_agents for select to anon using (enabled);
+    exception when duplicate_object then null; end;
   end if;
-exception
-  when duplicate_object then null;
+
+  if exists (select 1 from pg_roles where rolname = 'service_role') then
+    grant execute on function promote_world_revision(uuid) to service_role;
+  end if;
 end $$;
 
--- No INSERT/UPDATE/DELETE policy is granted to anon/authenticated users here.
--- Trusted agent writes must use a service role or a validated server-side RPC.
+-- No INSERT/UPDATE/DELETE policy is granted to anon/authenticated users.
+-- Trusted writes use service_role only from server/Edge Function/CI secrets; never from Vite/browser code.
