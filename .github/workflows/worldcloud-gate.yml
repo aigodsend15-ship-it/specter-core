@@ -1,0 +1,55 @@
+name: WorldCloud Gate
+
+on:
+  push:
+    branches: [worldcloud-v1]
+    paths:
+      - 'apps/opensa-worldmind-host/**'
+      - '.github/workflows/worldcloud-gate.yml'
+  pull_request:
+    paths:
+      - 'apps/opensa-worldmind-host/**'
+      - '.github/workflows/worldcloud-gate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.12.0'
+
+      - name: Validate SPECTER host scripts
+        run: |
+          node --check apps/opensa-worldmind-host/scripts/build.mjs
+          node --check apps/opensa-worldmind-host/scripts/generate-world-index.mjs
+          node -e "JSON.parse(require('node:fs').readFileSync('apps/opensa-worldmind-host/worldcloud/agent-policy.json','utf8')); console.log('agent_policy_json_ok')"
+
+      - name: Build WebGPU + WebGL2 WorldCloud
+        working-directory: apps/opensa-worldmind-host
+        run: node scripts/build.mjs
+
+      - name: Audit modern runtime dependencies
+        working-directory: apps/opensa-worldmind-host/.opensa
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Audit WebGL2 runtime dependencies
+        working-directory: apps/opensa-worldmind-host/.opensa-legacy
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Verify graphics ladder artifact
+        working-directory: apps/opensa-worldmind-host/.opensa
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const data = JSON.parse(fs.readFileSync('dist/graphics-ladder.json', 'utf8'));
+          const expected = ['webgpu-core', 'webgpu-compatibility', 'webgl2-three'];
+          if (JSON.stringify(data.order) !== JSON.stringify(expected)) throw new Error('graphics ladder drift');
+          if (!fs.existsSync('dist/legacy/index.html')) throw new Error('legacy build missing');
+          console.log(JSON.stringify({event:'worldcloud_gate_ok', order:data.order, cloudManifestConfigured:data.cloudManifestConfigured}));
+          NODE
