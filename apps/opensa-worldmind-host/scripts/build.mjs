@@ -103,8 +103,8 @@ app = replaceOnce(
 app = replaceOnce(
   app,
   `  if (webGpu !== null && webGpu !== 'ok') {`,
-  `  if (webGpu !== null && webGpu !== 'ok' && webGpu !== 'compatibility') {`,
-  'compatibility adapter accepted by shell',
+  `  if (webGpu !== null && webGpu !== 'ok' && webGpu !== 'compatibility' && webGpu !== 'webgl2') {`,
+  'compatibility/WebGL2 states accepted by shell',
 );
 writeFileSync(appFile, app);
 
