@@ -103,6 +103,41 @@ function allowRenderHost(root, label, base = null) {
   return sha256(vite);
 }
 
+function wireLegacyWorldMind(root) {
+  const source = join(hostRoot, 'patches', 'legacy-worldmind.ts');
+  const target = join(root, 'apps', 'web', 'src', 'ui', 'legacy-worldmind.ts');
+  cpSync(source, target);
+
+  const adapterFile = join(root, 'packages', 'game', 'src', 'adapters', 'gta-sa-world.adapter.ts');
+  let adapter = readFileSync(adapterFile, 'utf8');
+  const adapterAnchor = `  /** Every carcol paint combo for a model (palette-index tuples) — 2-colour entries then 4-colour;`;
+  const adapterMethods = `  /** SPECTER WorldMind: resolve a small prop from the actual loaded GTA catalogue. */\n  searchWorldMindModel(keyword: string): string | null {\n    const query = keyword.trim().toLowerCase();\n    if (!query || !this.defByName) return null;\n    for (const [name] of this.defByName) {\n      if (name.includes(query)) return name;\n    }\n    return null;\n  }\n\n  /** SPECTER WorldMind: build one native GTA-space prop for the shared WebGL2 overlay. */\n  async loadWorldMindProp(modelName: string): Promise<Object3D | null> {\n    await Promise.resolve();\n    const def = this.defByName?.get(modelName.toLowerCase());\n    if (!def) return null;\n    const dff = this.fs.get(\`${'${def.modelName.toLowerCase()}'} .dff\`.replace(' ', ''));\n    const txd = this.fs.get(\`${'${def.txdName.toLowerCase()}'} .txd\`.replace(' ', ''));\n    if (!dff || !txd) return null;\n    return buildClump(parseDff(dff), buildTextureMap(parseTxd(txd)), { convertToYUp: false });\n  }\n\n`;
+  adapter = replaceOnce(adapter, adapterAnchor, `${adapterMethods}${adapterAnchor}`, 'legacy WorldMind adapter methods');
+  writeFileSync(adapterFile, adapter);
+
+  const canvasFile = join(root, 'apps', 'web', 'src', 'ui', 'canvas-host.tsx');
+  let canvas = readFileSync(canvasFile, 'utf8');
+  canvas = replaceOnce(
+    canvas,
+    `import { loadCityBoxes, loadGxt, loadInfoZones } from './zone-data';`,
+    `import { loadCityBoxes, loadGxt, loadInfoZones } from './zone-data';\nimport { setupLegacyWorldMind } from './legacy-worldmind';`,
+    'legacy WorldMind import',
+  );
+  canvas = replaceOnce(
+    canvas,
+    `    game.frameEntity(player, 12);`,
+    `    game.frameEntity(player, 12);\n    // Shared persistent agent constructions are projected into the same GTA streaming root.\n    setupLegacyWorldMind(game, adapter);`,
+    'legacy WorldMind bootstrap',
+  );
+  writeFileSync(canvasFile, canvas);
+
+  return {
+    adapterSha256: sha256(adapter),
+    bridgeSha256: sha256(readFileSync(source)),
+    canvasSha256: sha256(canvas),
+  };
+}
+
 // Modern WebGPU runtime.
 cloneAt(sourceCommit, work);
 exposeSanAndreas(work, 'modern');
@@ -157,6 +192,7 @@ if (!existsSync(dist)) throw new Error('modern dist missing');
 cloneAt(legacyCommit, legacyWork);
 exposeSanAndreas(legacyWork, 'legacy');
 const legacyCloud = wireCloud(legacyWork, 'legacy');
+const legacyWorldMind = wireLegacyWorldMind(legacyWork);
 const legacyAppFile = join(legacyWork, 'apps', 'web', 'src', 'ui', 'shell', 'app.tsx');
 let legacyApp = readFileSync(legacyAppFile, 'utf8');
 legacyApp = replaceOnce(legacyApp, `const THREE_OVERRIDE = new URLSearchParams(window.location.search).get('engine') === 'three';`, `const THREE_OVERRIDE = true;`, 'force WebGL2');
@@ -172,6 +208,7 @@ cpSync(legacyDist, legacyOut, { recursive: true });
 
 writeFileSync(join(dist, 'graphics-ladder.json'), JSON.stringify({
   order:['webgpu-core','webgpu-compatibility','webgl2-three'], sourceCommit, legacyCommit, renderHost,
-  cloudManifestConfigured:Boolean(cloudManifest), modernCloud, legacyCloud, sharedWorldMind:Boolean(process.env.VITE_SUPABASE_URL),
+  cloudManifestConfigured:Boolean(cloudManifest), modernCloud, legacyCloud, legacyWorldMind,
+  sharedWorldMind:Boolean(process.env.VITE_SUPABASE_URL),
 }, null, 2));
-console.log(JSON.stringify({ event:'gtasa_worldmind_build_ok', order:['webgpu-core','webgpu-compatibility','webgl2-three'], cloudManifestConfigured:Boolean(cloudManifest), sharedWorldMind:Boolean(process.env.VITE_SUPABASE_URL), dist, legacyOut }));
+console.log(JSON.stringify({ event:'gtasa_worldmind_build_ok', order:['webgpu-core','webgpu-compatibility','webgl2-three'], cloudManifestConfigured:Boolean(cloudManifest), sharedWorldMind:Boolean(process.env.VITE_SUPABASE_URL), legacyWorldMind:true, dist, legacyOut }));
