@@ -42,10 +42,30 @@ function sha256(value) {
   return createHash('sha256').update(value).digest('hex');
 }
 
+function exposeLocalSanAndreas(root, label) {
+  const configFile = join(root, 'apps', 'web', 'src', 'game-config.tsx');
+  let config = readFileSync(configFile, 'utf8');
+  config = replaceOnce(
+    config,
+    `  original: {\n    assetLoader: 'local',\n    devOnly: true,`,
+    `  original: {\n    assetLoader: 'local',`,
+    `${label} production local San Andreas launcher`,
+  );
+  config = replaceOnce(
+    config,
+    `label: 'Run San Andreas [local only]'`,
+    `label: 'Run GTA San Andreas [select game folder]'`,
+    `${label} San Andreas menu label`,
+  );
+  writeFileSync(configFile, config);
+  return sha256(config);
+}
+
 // ---------------------------------------------------------------------------
 // Modern WebGPU build: WorldMind + Core -> Compatibility graphics ladder.
 // ---------------------------------------------------------------------------
 cloneAt(sourceCommit, work);
+const modernGameConfigSha256 = exposeLocalSanAndreas(work, 'modern');
 
 const bridgeSource = join(hostRoot, 'patches', 'worldmind-agent-build.ts');
 const bridgeTarget = join(work, 'apps', 'web', 'src', 'ui', 'worldmind-agent-build.ts');
@@ -138,6 +158,7 @@ console.log(
     sourceCommit,
     legacyCommit,
     renderHost,
+    modernGameConfigSha256,
     worldMindSha256: sha256(bridge),
     graphicsGateSha256: sha256(readFileSync(graphicsGateTarget)),
     appSha256: sha256(app),
@@ -156,6 +177,7 @@ if (!existsSync(dist)) throw new Error(`OpenSA build finished without dist at ${
 // Legacy WebGL2 build: exact pre-deletion Three/WebGL renderer, isolated under /legacy/.
 // ---------------------------------------------------------------------------
 cloneAt(legacyCommit, legacyWork);
+const legacyGameConfigSha256 = exposeLocalSanAndreas(legacyWork, 'legacy');
 
 // Force the historical Three/WebGL host. That commit already kept this renderer behind ?engine=three;
 // making the legacy bundle unconditional prevents another WebGPU probe after the modern shell redirected.
@@ -197,6 +219,8 @@ writeFileSync(
       sourceCommit,
       legacyCommit,
       renderHost,
+      modernGameConfigSha256,
+      legacyGameConfigSha256,
     },
     null,
     2,
@@ -211,6 +235,8 @@ console.log(
     renderHost,
     dist,
     legacyOut,
+    modernGameConfigSha256,
+    legacyGameConfigSha256,
     order: ['webgpu-core', 'webgpu-compatibility', 'webgl2-three'],
   }),
 );
