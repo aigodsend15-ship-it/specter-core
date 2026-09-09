@@ -23,6 +23,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22.12.0'
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
 
       - name: Validate SPECTER host scripts
         run: |
@@ -31,6 +34,9 @@ jobs:
           node --check apps/opensa-worldmind-host/scripts/repack-for-supabase.mjs
           node --check apps/opensa-worldmind-host/scripts/publish-supabase.mjs
           node -e "JSON.parse(require('node:fs').readFileSync('apps/opensa-worldmind-host/worldcloud/agent-policy.json','utf8')); console.log('agent_policy_json_ok')"
+
+      - name: Type-check WorldMind Supabase Edge Function
+        run: deno check apps/opensa-worldmind-host/worldcloud/functions/world-agent/index.ts
 
       - name: Build WebGPU + WebGL2 WorldCloud
         working-directory: apps/opensa-worldmind-host
