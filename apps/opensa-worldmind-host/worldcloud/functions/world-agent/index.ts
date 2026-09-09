@@ -197,7 +197,9 @@ function canonicalJson(value: unknown): string {
 }
 
 async function sha256Hex(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  // Deno 2's generic Uint8Array may wrap ArrayBufferLike. WebCrypto requires an owned ArrayBuffer.
+  const owned = Uint8Array.from(bytes);
+  const digest = await crypto.subtle.digest('SHA-256', owned.buffer);
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }
 
