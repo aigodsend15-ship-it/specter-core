@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "defaultDeny": true,
+  "capabilities": {
+    "world.inspect": {"risk": "low", "requiresValidation": false},
+    "world.place_object": {"risk": "medium", "requiresValidation": true},
+    "world.create_building": {"risk": "medium", "requiresValidation": true},
+    "world.modify_owned": {"risk": "medium", "requiresValidation": true},
+    "world.demolish_owned": {"risk": "medium", "requiresValidation": true},
+    "world.create_interior": {"risk": "medium", "requiresValidation": true},
+    "world.create_road": {"risk": "high", "requiresValidation": true},
+    "world.create_nav": {"risk": "high", "requiresValidation": true},
+    "world.harvest": {"risk": "low", "requiresValidation": true},
+    "world.trade": {"risk": "medium", "requiresValidation": true},
+    "world.create_job": {"risk": "medium", "requiresValidation": true},
+    "world.commit_revision": {"risk": "high", "requiresValidation": true}
+  },
+  "agents": {
+    "forge": ["world.inspect", "world.place_object", "world.create_building", "world.modify_owned", "world.demolish_owned", "world.create_interior"],
+    "aether": ["world.inspect", "world.create_nav", "world.commit_revision"],
+    "nyx": ["world.inspect", "world.place_object", "world.create_nav"],
+    "helios": ["world.inspect", "world.create_job", "world.commit_revision"],
+    "mason": ["world.inspect", "world.place_object", "world.create_building", "world.modify_owned", "world.demolish_owned"],
+    "aria": ["world.inspect", "world.place_object", "world.create_interior", "world.trade"]
+  },
+  "hardLimits": {
+    "maxObjectsPerRevision": 500,
+    "maxSingleObjectRadiusMeters": 80,
+    "maxRoadLengthMetersPerRevision": 1500,
+    "maxTextureDimension": 2048,
+    "maxNewTextureBytesPerRevision": 67108864,
+    "requireSha256": true,
+    "requireProvenance": true,
+    "requireRollback": true,
+    "forbidBaseMutation": true,
+    "forbidArbitraryShell": true,
+    "forbidCredentialAccess": true
+  },
+  "promotionGates": [
+    "schema",
+    "asset-license",
+    "sha256",
+    "collision",
+    "navmesh",
+    "placement-overlap",
+    "object-budget",
+    "texture-budget",
+    "frame-time",
+    "rollback"
+  ]
+}
