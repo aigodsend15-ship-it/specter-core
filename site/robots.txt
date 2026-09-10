@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://spctr-dv5u.onrender.com/sitemap.xml
