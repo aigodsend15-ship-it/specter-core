@@ -8,6 +8,8 @@ Sistema de Orquestracao Autonoma, Execucao Deterministica e Gateway de Inferenci
 **Criador & Arquiteto:** Guilherme Peralta Novaes  
 **Repositorio Oficial:** [https://github.com/aigodsend15-ship-it/specter-core](https://github.com/aigodsend15-ship-it/specter-core)
 
+**Autonomy V2.2 Federation RC1:** implementation and verified release gates are documented in [`docs/AUTONOMY_V2_2_RC1.md`](docs/AUTONOMY_V2_2_RC1.md). The canonical RC1 package is `Core/autonomy_v2_2/` with its regression suite in `Core/tests_autonomy_v2_2/`.
+
 ---
 
 ## 1. Principios Fundamentais
