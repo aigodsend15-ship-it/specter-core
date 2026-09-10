@@ -8,6 +8,8 @@ on:
     paths:
       - 'Core/remote_worker_fabric.py'
       - 'Core/test_remote_worker_fabric.py'
+      - 'Core/zero_key_capacity.py'
+      - 'Core/test_zero_key_capacity.py'
       - '.github/workflows/remote-worker-fabric-ci.yml'
   workflow_dispatch:
 
@@ -24,6 +26,8 @@ jobs:
         with:
           python-version: '3.12'
       - name: Compile
-        run: python -m py_compile Core/remote_worker_fabric.py Core/test_remote_worker_fabric.py
+        run: python -m py_compile Core/remote_worker_fabric.py Core/test_remote_worker_fabric.py Core/zero_key_capacity.py Core/test_zero_key_capacity.py
       - name: Unit tests
-        run: python Core/test_remote_worker_fabric.py
+        run: |
+          python Core/test_remote_worker_fabric.py
+          python Core/test_zero_key_capacity.py
