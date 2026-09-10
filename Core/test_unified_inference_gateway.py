@@ -85,13 +85,14 @@ class UnifiedInferenceGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cb.state, CircuitState.CLOSED)
 
     async def test_http_server_endpoints(self):
-        http_server = SpecterHttpServer(self.gateway, host="127.0.0.1", port=18088)
+        http_server = SpecterHttpServer(self.gateway, host="127.0.0.1", port=0)
         await http_server.start()
+        port = http_server.server.sockets[0].getsockname()[1]
 
         import json
 
         async def send_http(req_bytes: bytes) -> bytes:
-            r, w = await asyncio.open_connection("127.0.0.1", 18088)
+            r, w = await asyncio.open_connection("127.0.0.1", port)
             w.write(req_bytes)
             await w.drain()
             resp = await r.read()
