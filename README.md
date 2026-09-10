@@ -65,5 +65,12 @@ python -m unittest discover -s Core -p "test_*.py"
 
 ---
 
+## Federação local v1
+
+Caixa postal persistente e protocolo estrito para propostas entre agentes:
+consulte [FEDERATION_V1.md](FEDERATION_V1.md). O módulo registra e entrega mensagens;
+a integração com executores e a rede privada são etapas separadas.
+
 ## Licenca
+
 Distribuido sob Licenca MIT. Veja [`LICENSE`](LICENSE) para mais informacoes.
