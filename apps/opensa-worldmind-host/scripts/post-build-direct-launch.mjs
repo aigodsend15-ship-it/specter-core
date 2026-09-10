@@ -10,7 +10,6 @@ const dist = join(hostRoot, '.opensa', 'dist');
 const runtime = String.raw`
 <script id="specter-direct-launch">
 (() => {
-  const FLAG = 'specter.gtasa.folder-picked.v1';
   const text = (el) => (el?.textContent || '').replace(/\s+/g, ' ').trim().toLowerCase();
   const buttons = () => [...document.querySelectorAll('button,a,[role="button"]')];
   const find = (parts) => buttons().find((el) => parts.some((p) => text(el).includes(p)));
@@ -23,7 +22,6 @@ const runtime = String.raw`
     }
   };
   let gameClicked = false;
-  let folderClicked = false;
   const advance = () => {
     hideDeadDemo();
     if (new URLSearchParams(location.search).get('menu') === '1') return;
@@ -32,27 +30,11 @@ const runtime = String.raw`
       if (game) {
         gameClicked = true;
         game.click();
-        setTimeout(advance, 650);
-        return;
       }
     }
-    if (!folderClicked && localStorage.getItem(FLAG) === '1') {
-      const folder = find(['choose game folder', 'select game folder', 'choose folder', 'select folder']);
-      if (folder) {
-        folderClicked = true;
-        // A restored FileSystemHandle with already-granted permission needs no chooser.
-        // If the browser revoked permission this synthetic click safely fails and the real button remains.
-        folder.click();
-      }
-    }
+    // Deliberately never call showDirectoryPicker() from a synthetic click. Chromium requires
+    // a real user gesture. Once cloud assets are configured this picker path is bypassed entirely.
   };
-  addEventListener('click', (event) => {
-    const el = event.target?.closest?.('button,a,[role="button"]');
-    if (!el) return;
-    if (['choose game folder','select game folder','choose folder','select folder'].some((p) => text(el).includes(p))) {
-      localStorage.setItem(FLAG, '1');
-    }
-  }, true);
   const observer = new MutationObserver(() => advance());
   observer.observe(document.documentElement, { childList: true, subtree: true });
   setTimeout(advance, 250);
