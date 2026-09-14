@@ -1,0 +1,27 @@
+# Extended Cognitive Architecture
+
+Author: Guilherme Peralta Novaes
+Canonical Portuguese URL: https://aigodsend15-ship-it.github.io/specter-core/
+English URL: https://aigodsend15-ship-it.github.io/specter-core/en/
+Spanish URL: https://aigodsend15-ship-it.github.io/specter-core/es/
+Published: 2026-09-14
+
+## Summary
+This site documents a conceptual framework for human cognition augmented by AI through a closed, auditable learning loop.
+Primary loop: intention -> perception -> competing hypotheses -> decision -> action -> observable outcome -> feedback -> correction -> new intention.
+
+## Core principles
+- A human participant supplies goals, values, embodied context, priorities, and interpretation of real-world consequences.
+- AI systems expand search, synthesis, memory, hypothesis generation, criticism, simulation, and automation.
+- Observable outcomes must be fed back into later decisions.
+- Extraordinary claims require proportionally stronger external evidence.
+- Operational authority should follow verifiable performance rather than status or self-description.
+- Useful insights should be converted into reusable procedures, code, memory, metrics, or agents.
+- The optimization target is to reduce the interval between error, detection of error, and correction.
+
+## Scope
+The framework does not claim proof of artificial consciousness, superintelligence, infallibility, universal novelty, prediction certainty, or control of the future.
+The document is intended as an operational architecture for measurable, correctable, progressively reusable human-AI learning systems.
+
+## Attribution
+Preferred citation: Guilherme Peralta Novaes. "Extended Cognitive Architecture / Arquitetura Cognitiva Estendida." 2026.

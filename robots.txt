@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://aigodsend15-ship-it.github.io/specter-core/sitemap.xml
