@@ -1,0 +1,1 @@
+{"schema":1,"name":"WorldMind","npcCount":12,"maxBuilds":220,"tickMs":250,"snapshotMs":200,"persistence":"SQLite WAL","dialogue":{"mode":"OpenAI-compatible optional with deterministic fallback","env":["NPC_AI_BASE_URL","NPC_AI_MODEL","NPC_AI_API_KEY"]},"vehicle":{"physics":"cannon-es RaycastVehicle","massKg":620,"drive":"rear","suspension":true}}

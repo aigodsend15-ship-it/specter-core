@@ -1,0 +1,1 @@
+{"version":"0.3.0-worldmind","features":["threejs-renderer","cannon-es-physics","raycast-vehicle","persistent-npcs","npc-memory","autonomous-building","optional-openai-compatible-npc-dialogue","multiplayer","day-night","minimap"],"publicAssets":"CC0 Kenney","rockstarAssetsIncluded":false}
