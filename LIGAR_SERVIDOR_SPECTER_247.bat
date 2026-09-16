@@ -12,8 +12,10 @@ set "LOG_PATH=%CORE_DIR%\supervisor_247.log"
 :: Detectar ou configurar Python no PATH se necessario
 where python >nul 2>&1
 if errorlevel 1 (
-    if exist "C:\Users\USER\AppData\Local\Programs\Python\Python312_Clean\python.exe" (
-        set "PATH=C:\Users\USER\AppData\Local\Programs\Python\Python312_Clean;%PATH%"
+    if exist "%LOCALAPPDATA%\Programs\Python\Python312\python.exe" (
+        set "PATH=%LOCALAPPDATA%\Programs\Python\Python312;%PATH%"
+    ) else if exist "%LOCALAPPDATA%\Programs\Python\Python311\python.exe" (
+        set "PATH=%LOCALAPPDATA%\Programs\Python\Python311;%PATH%"
     )
 )
 

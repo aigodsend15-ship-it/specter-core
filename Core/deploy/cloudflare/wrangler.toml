@@ -1,0 +1,12 @@
+name = "specter-edge-gateway"
+main = "worker.js"
+compatibility_date = "2024-09-01"
+
+[vars]
+PRIMARY_UPSTREAM = "http://127.0.0.1:8080"
+FALLBACK_UPSTREAM = "https://pintograndao-hermes-bridge.hf.space"
+UPSTREAM_TIMEOUT_MS = "6000"
+SPECTER_AUTH_TOKEN = "specter-mesh-token-v3"
+
+# For production deployment with Cloudflare Tunnels:
+# PRIMARY_UPSTREAM = "https://specter.yourdomain.com"

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-SPECTER UNIFIED INFERENCE GATEWAY (v1.0 - PRODUCTION CORE)
+SPECTER UNIFIED INFERENCE GATEWAY (v3.0.0 - PRODUCTION CORE)
 Architected by: Aether (Theory), Nyx (Protocols), Helios (Orch), Forge (Engine)
 ================================================================================
 Properties:
@@ -13,16 +13,34 @@ Properties:
 ================================================================================
 """
 
+__version__ = "3.0.0"
+
 import asyncio
+import base64
 from dataclasses import dataclass, field
 from enum import Enum
+import hashlib
 import json
 import logging
+import os
+import struct
 import time
 import uuid
 import urllib.request
 import urllib.error
 from typing import Any, AsyncGenerator, Dict, List, Optional, Tuple
+
+try:
+    from universal_llm_connector import (
+        BrowserBridgeIsolationGuard,
+        get_universal_connector,
+        IsolationViolationError
+    )
+except ImportError:
+    BrowserBridgeIsolationGuard = None
+    get_universal_connector = None
+    IsolationViolationError = PermissionError
+
 
 logger = logging.getLogger("SpecterGateway")
 if not logger.handlers:
@@ -197,7 +215,9 @@ class BackendNode:
                         for line in resp:
                             decoded = line.decode("utf-8")
                             if decoded.strip():
-                                yield decoded
+                                # Preserva as quebras de linha duplas (\n\n) no streaming SSE de nós remotos
+                                chunk = decoded.rstrip("\r\n") + "\n\n"
+                                yield chunk
                     self.circuit.record_success()
             except Exception as e:
                 self.circuit.record_failure()
@@ -225,8 +245,8 @@ class UnifiedInferenceGateway:
         ]
         if not candidates:
             return None
-        # Balanceamento por menor concorrência ativa
-        return min(candidates, key=lambda n: n.semaphore._value if hasattr(n.semaphore, "_value") else 0)
+        # Balanceamento por menor concorrência ativa (mais vagas livres no semáforo)
+        return max(candidates, key=lambda n: n.semaphore._value if hasattr(n.semaphore, "_value") else 0)
 
     async def submit_request(
         self,
@@ -302,11 +322,18 @@ class UnifiedInferenceGateway:
 
 
 class SpecterHttpServer:
-    """Zero-dependency HTTP/1.1 Server for OpenAI-compatible REST + SSE endpoints."""
-    def __init__(self, gateway: UnifiedInferenceGateway, host: str = "127.0.0.1", port: int = 8080):
+    """Zero-dependency HTTP/1.1 Server for OpenAI-compatible REST + SSE endpoints and Mesh Peer Protocol."""
+    def __init__(
+        self,
+        gateway: UnifiedInferenceGateway,
+        host: str = "127.0.0.1",
+        port: int = 8080,
+        auth_token: Optional[str] = None
+    ):
         self.gateway = gateway
         self.host = host
         self.port = port
+        self.auth_token = auth_token if auth_token is not None else os.environ.get("SPECTER_AUTH_TOKEN")
         self.server: Optional[asyncio.Server] = None
 
     async def start(self):
@@ -318,6 +345,91 @@ class SpecterHttpServer:
             self.server.close()
             await self.server.wait_closed()
             logger.info("Specter HTTP Gateway encerrado.")
+
+    async def handle_websocket(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, headers: Dict[str, str]):
+        """RFC 6455 compliant WebSocket handshake and message loop in pure Python standard library."""
+        sec_key = headers.get("sec-websocket-key", "")
+        if not sec_key:
+            writer.close()
+            return
+        guid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+        accept_val = base64.b64encode(hashlib.sha1((sec_key + guid).encode("ascii")).digest()).decode("ascii")
+        handshake = (
+            "HTTP/1.1 101 Switching Protocols\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            f"Sec-WebSocket-Accept: {accept_val}\r\n\r\n"
+        ).encode("utf-8")
+        writer.write(handshake)
+        await writer.drain()
+
+        try:
+            while True:
+                h = await reader.readexactly(2)
+                b1, b2 = h[0], h[1]
+                opcode = b1 & 0x0F
+                has_mask = (b2 & 0x80) != 0
+                payload_len = b2 & 0x7F
+                if payload_len == 126:
+                    ext = await reader.readexactly(2)
+                    payload_len = struct.unpack("!H", ext)[0]
+                elif payload_len == 127:
+                    ext = await reader.readexactly(8)
+                    payload_len = struct.unpack("!Q", ext)[0]
+
+                mask_key = None
+                if has_mask:
+                    mask_key = await reader.readexactly(4)
+
+                payload = await reader.readexactly(payload_len)
+                if has_mask and mask_key:
+                    unmasked = bytearray(payload_len)
+                    for i in range(payload_len):
+                        unmasked[i] = payload[i] ^ mask_key[i % 4]
+                    payload = bytes(unmasked)
+
+                if opcode == 0x8:  # Close
+                    writer.write(bytearray([0x88, 0x00]))
+                    await writer.drain()
+                    break
+                elif opcode == 0x9:  # Ping
+                    writer.write(bytearray([0x8A, len(payload)]) + payload)
+                    await writer.drain()
+                elif opcode == 0x1:  # Text
+                    text = payload.decode("utf-8", errors="replace")
+                    # Process frame
+                    resp_data = {"status": "ACK", "echo": text, "server_time": time.time()}
+                    if get_universal_connector:
+                        try:
+                            if text.strip().startswith(":"):
+                                resp_data = get_universal_connector().execute_dsl_text(text)
+                            elif text.strip().startswith("{"):
+                                parsed = json.loads(text)
+                                if "action" in parsed:
+                                    resp_data = get_universal_connector().submit_mesh_task(
+                                        parsed["action"], parsed.get("payload", {})
+                                    )
+                        except Exception as e:
+                            resp_data = {"error": str(e)}
+
+                    resp_bytes = json.dumps(resp_data).encode("utf-8")
+                    rlen = len(resp_bytes)
+                    if rlen <= 125:
+                        rhead = bytearray([0x81, rlen])
+                    elif rlen <= 65535:
+                        rhead = bytearray([0x81, 126]) + struct.pack("!H", rlen)
+                    else:
+                        rhead = bytearray([0x81, 127]) + struct.pack("!Q", rlen)
+                    writer.write(rhead + resp_bytes)
+                    await writer.drain()
+        except Exception:
+            pass
+        finally:
+            try:
+                writer.close()
+                await writer.wait_closed()
+            except Exception:
+                pass
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
@@ -351,7 +463,8 @@ class SpecterHttpServer:
                     "HTTP/1.1 204 No Content\r\n"
                     "Access-Control-Allow-Origin: *\r\n"
                     "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n"
-                    "Access-Control-Allow-Headers: Content-Type, Authorization, x-specter-priority\r\n"
+                    "Access-Control-Allow-Headers: Content-Type, Authorization, x-specter-priority, x-specter-peer-id, x-specter-peer-role\r\n"
+                    "Connection: close\r\n"
                     "Content-Length: 0\r\n\r\n"
                 )
                 writer.write(resp.encode("utf-8"))
@@ -360,17 +473,11 @@ class SpecterHttpServer:
                 await writer.wait_closed()
                 return
 
-            # Read body if Content-Length given
-            content_length = int(headers.get("content-length", 0))
-            body_bytes = b""
-            if content_length > 0:
-                body_bytes = await reader.readexactly(content_length)
-
-            # Route: GET /health or /v1/health
+            # Route: GET /health or /v1/health (Public health probe)
             if method == "GET" and path in ("/health", "/v1/health"):
                 health_data = {
                     "status": "healthy",
-                    "version": "1.1.0",
+                    "version": "3.0.0",
                     "nodes_count": len(self.gateway.nodes),
                     "queue_size": self.gateway.priority_queue.qsize(),
                     "nodes": [
@@ -388,6 +495,7 @@ class SpecterHttpServer:
                     "HTTP/1.1 200 OK\r\n"
                     "Content-Type: application/json; charset=utf-8\r\n"
                     "Access-Control-Allow-Origin: *\r\n"
+                    "Connection: close\r\n"
                     f"Content-Length: {len(body)}\r\n\r\n"
                 ).encode("utf-8") + body
                 writer.write(resp)
@@ -395,6 +503,41 @@ class SpecterHttpServer:
                 writer.close()
                 await writer.wait_closed()
                 return
+
+            # Bearer token verification for non-health endpoints
+            if self.auth_token:
+                auth = headers.get("authorization", "")
+                if auth != f"Bearer {self.auth_token}":
+                    err_body = json.dumps({
+                        "error": {
+                            "message": "Unauthorized: Invalid or missing Bearer authorization token",
+                            "type": "authentication_error",
+                            "code": 401
+                        }
+                    }).encode("utf-8")
+                    resp = (
+                        "HTTP/1.1 401 Unauthorized\r\n"
+                        "Content-Type: application/json; charset=utf-8\r\n"
+                        "Access-Control-Allow-Origin: *\r\n"
+                        "Connection: close\r\n"
+                        f"Content-Length: {len(err_body)}\r\n\r\n"
+                    ).encode("utf-8") + err_body
+                    writer.write(resp)
+                    await writer.drain()
+                    writer.close()
+                    await writer.wait_closed()
+                    return
+
+            # WebSocket upgrade check on /v1/mesh/ws
+            if method == "GET" and path == "/v1/mesh/ws" and headers.get("upgrade", "").lower() == "websocket":
+                await self.handle_websocket(reader, writer, headers)
+                return
+
+            # Read body if Content-Length given
+            content_length = int(headers.get("content-length", 0))
+            body_bytes = b""
+            if content_length > 0:
+                body_bytes = await reader.readexactly(content_length)
 
             # Route: GET /v1/models
             if method == "GET" and path == "/v1/models":
@@ -410,12 +553,18 @@ class SpecterHttpServer:
                             })
                 if not models:
                     models.append({"id": "specter-sovereign-core", "object": "model", "created": 1725600000, "owned_by": "specter"})
+
+                # Apply strict isolation sanitization
+                if BrowserBridgeIsolationGuard:
+                    models = BrowserBridgeIsolationGuard.sanitize_model_catalog(models)
+
                 models_data = {"object": "list", "data": models}
                 body = json.dumps(models_data, indent=2).encode("utf-8")
                 resp = (
                     "HTTP/1.1 200 OK\r\n"
                     "Content-Type: application/json; charset=utf-8\r\n"
                     "Access-Control-Allow-Origin: *\r\n"
+                    "Connection: close\r\n"
                     f"Content-Length: {len(body)}\r\n\r\n"
                 ).encode("utf-8") + body
                 writer.write(resp)
@@ -434,6 +583,7 @@ class SpecterHttpServer:
                         "HTTP/1.1 400 Bad Request\r\n"
                         "Content-Type: application/json; charset=utf-8\r\n"
                         "Access-Control-Allow-Origin: *\r\n"
+                        "Connection: close\r\n"
                         f"Content-Length: {len(err_body)}\r\n\r\n"
                     ).encode("utf-8") + err_body
                     writer.write(resp)
@@ -441,6 +591,25 @@ class SpecterHttpServer:
                     writer.close()
                     await writer.wait_closed()
                     return
+
+                # Isolation guard audit
+                if BrowserBridgeIsolationGuard:
+                    try:
+                        BrowserBridgeIsolationGuard.audit_incoming_payload(payload)
+                    except PermissionError as e:
+                        err_body = json.dumps({"error": {"message": str(e), "type": "security_error", "code": 403}}).encode("utf-8")
+                        resp = (
+                            "HTTP/1.1 403 Forbidden\r\n"
+                            "Content-Type: application/json; charset=utf-8\r\n"
+                            "Access-Control-Allow-Origin: *\r\n"
+                            "Connection: close\r\n"
+                            f"Content-Length: {len(err_body)}\r\n\r\n"
+                        ).encode("utf-8") + err_body
+                        writer.write(resp)
+                        await writer.drain()
+                        writer.close()
+                        await writer.wait_closed()
+                        return
 
                 stream = payload.get("stream", False)
                 base_priority = int(headers.get("x-specter-priority", 10))
@@ -453,7 +622,7 @@ class SpecterHttpServer:
                             "HTTP/1.1 200 OK\r\n"
                             "Content-Type: text/event-stream; charset=utf-8\r\n"
                             "Cache-Control: no-cache\r\n"
-                            "Connection: keep-alive\r\n"
+                            "Connection: close\r\n"
                             "Access-Control-Allow-Origin: *\r\n\r\n"
                         ).encode("utf-8")
                         writer.write(header_resp)
@@ -468,6 +637,7 @@ class SpecterHttpServer:
                             "HTTP/1.1 200 OK\r\n"
                             "Content-Type: application/json; charset=utf-8\r\n"
                             "Access-Control-Allow-Origin: *\r\n"
+                            "Connection: close\r\n"
                             f"Content-Length: {len(body)}\r\n\r\n"
                         ).encode("utf-8") + body
                         writer.write(resp)
@@ -478,6 +648,161 @@ class SpecterHttpServer:
                         "HTTP/1.1 502 Bad Gateway\r\n"
                         "Content-Type: application/json; charset=utf-8\r\n"
                         "Access-Control-Allow-Origin: *\r\n"
+                        "Connection: close\r\n"
+                        f"Content-Length: {len(err_body)}\r\n\r\n"
+                    ).encode("utf-8") + err_body
+                    writer.write(resp)
+                    await writer.drain()
+
+                writer.close()
+                await writer.wait_closed()
+                return
+
+            # Route: POST /v1/mesh/task/submit
+            if method == "POST" and path == "/v1/mesh/task/submit":
+                try:
+                    payload = json.loads(body_bytes.decode("utf-8"))
+                    peer_id = headers.get("x-specter-peer-id", "remote_peer")
+                    conn = get_universal_connector() if get_universal_connector else None
+                    if not conn:
+                        raise RuntimeError("Universal connector not loaded")
+                    task_rec = conn.submit_mesh_task(
+                        action=payload.get("action", "generic.exec.v1"),
+                        payload=payload.get("payload", {}),
+                        idempotency_key=payload.get("idempotency_key"),
+                        priority=int(payload.get("priority", 10)),
+                        peer_id=peer_id
+                    )
+                    resp_body = json.dumps(task_rec, indent=2).encode("utf-8")
+                    resp = (
+                        "HTTP/1.1 200 OK\r\n"
+                        "Content-Type: application/json; charset=utf-8\r\n"
+                        "Access-Control-Allow-Origin: *\r\n"
+                        "Connection: close\r\n"
+                        f"Content-Length: {len(resp_body)}\r\n\r\n"
+                    ).encode("utf-8") + resp_body
+                    writer.write(resp)
+                    await writer.drain()
+                except Exception as e:
+                    err_body = json.dumps({"error": {"message": str(e), "type": "task_submit_error"}}).encode("utf-8")
+                    status_code = 403 if isinstance(e, PermissionError) else 400
+                    resp = (
+                        f"HTTP/1.1 {status_code} Bad Request\r\n"
+                        "Content-Type: application/json; charset=utf-8\r\n"
+                        "Access-Control-Allow-Origin: *\r\n"
+                        "Connection: close\r\n"
+                        f"Content-Length: {len(err_body)}\r\n\r\n"
+                    ).encode("utf-8") + err_body
+                    writer.write(resp)
+                    await writer.drain()
+
+                writer.close()
+                await writer.wait_closed()
+                return
+
+            # Route: GET /v1/mesh/task/{task_id}
+            if method == "GET" and path.startswith("/v1/mesh/task/"):
+                task_id = path[len("/v1/mesh/task/"):].strip()
+                conn = get_universal_connector() if get_universal_connector else None
+                rec = conn.get_mesh_task_status(task_id) if conn else None
+                if rec:
+                    resp_body = json.dumps(rec, indent=2).encode("utf-8")
+                    resp = (
+                        "HTTP/1.1 200 OK\r\n"
+                        "Content-Type: application/json; charset=utf-8\r\n"
+                        "Access-Control-Allow-Origin: *\r\n"
+                        "Connection: close\r\n"
+                        f"Content-Length: {len(resp_body)}\r\n\r\n"
+                    ).encode("utf-8") + resp_body
+                else:
+                    resp_body = json.dumps({"error": {"message": f"Task '{task_id}' not found", "type": "not_found"}}).encode("utf-8")
+                    resp = (
+                        "HTTP/1.1 404 Not Found\r\n"
+                        "Content-Type: application/json; charset=utf-8\r\n"
+                        "Access-Control-Allow-Origin: *\r\n"
+                        "Connection: close\r\n"
+                        f"Content-Length: {len(resp_body)}\r\n\r\n"
+                    ).encode("utf-8") + resp_body
+                writer.write(resp)
+                await writer.drain()
+                writer.close()
+                await writer.wait_closed()
+                return
+
+            # Route: POST /v1/mesh/heartbeat
+            if method == "POST" and path == "/v1/mesh/heartbeat":
+                try:
+                    payload = json.loads(body_bytes.decode("utf-8")) if body_bytes else {}
+                    peer_id = payload.get("peer_id") or headers.get("x-specter-peer-id", "peer-unknown")
+                    role = payload.get("role") or headers.get("x-specter-peer-role", "specialist_worker")
+                    conn = get_universal_connector() if get_universal_connector else None
+                    if conn:
+                        hb_res = conn.register_peer_heartbeat(
+                            peer_id=peer_id,
+                            role=role,
+                            telemetry=payload.get("telemetry", {})
+                        )
+                    else:
+                        hb_res = {"status": "ACK", "server_time": time.time(), "peer_id": peer_id}
+                    resp_body = json.dumps(hb_res, indent=2).encode("utf-8")
+                    resp = (
+                        "HTTP/1.1 200 OK\r\n"
+                        "Content-Type: application/json; charset=utf-8\r\n"
+                        "Access-Control-Allow-Origin: *\r\n"
+                        "Connection: close\r\n"
+                        f"Content-Length: {len(resp_body)}\r\n\r\n"
+                    ).encode("utf-8") + resp_body
+                    writer.write(resp)
+                    await writer.drain()
+                except Exception as e:
+                    err_body = json.dumps({"error": {"message": str(e), "type": "heartbeat_error"}}).encode("utf-8")
+                    resp = (
+                        "HTTP/1.1 400 Bad Request\r\n"
+                        "Content-Type: application/json; charset=utf-8\r\n"
+                        "Access-Control-Allow-Origin: *\r\n"
+                        "Connection: close\r\n"
+                        f"Content-Length: {len(err_body)}\r\n\r\n"
+                    ).encode("utf-8") + err_body
+                    writer.write(resp)
+                    await writer.drain()
+
+                writer.close()
+                await writer.wait_closed()
+                return
+
+            # Route: POST /v1/mesh/dsl
+            if method == "POST" and path == "/v1/mesh/dsl":
+                try:
+                    peer_id = headers.get("x-specter-peer-id", "remote_peer")
+                    dsl_text = ""
+                    try:
+                        p_json = json.loads(body_bytes.decode("utf-8"))
+                        dsl_text = p_json.get("dsl", "")
+                    except Exception:
+                        dsl_text = body_bytes.decode("utf-8", errors="replace")
+
+                    conn = get_universal_connector() if get_universal_connector else None
+                    if not conn:
+                        raise RuntimeError("Universal connector not loaded")
+                    dsl_res = conn.execute_dsl_text(dsl_text, peer_id=peer_id)
+                    resp_body = json.dumps(dsl_res, indent=2).encode("utf-8")
+                    resp = (
+                        "HTTP/1.1 200 OK\r\n"
+                        "Content-Type: application/json; charset=utf-8\r\n"
+                        "Access-Control-Allow-Origin: *\r\n"
+                        "Connection: close\r\n"
+                        f"Content-Length: {len(resp_body)}\r\n\r\n"
+                    ).encode("utf-8") + resp_body
+                    writer.write(resp)
+                    await writer.drain()
+                except Exception as e:
+                    status_code = 403 if isinstance(e, PermissionError) else 400
+                    err_body = json.dumps({"error": {"message": str(e), "type": "dsl_error"}}).encode("utf-8")
+                    resp = (
+                        f"HTTP/1.1 {status_code} Bad Request\r\n"
+                        "Content-Type: application/json; charset=utf-8\r\n"
+                        "Access-Control-Allow-Origin: *\r\n"
+                        "Connection: close\r\n"
                         f"Content-Length: {len(err_body)}\r\n\r\n"
                     ).encode("utf-8") + err_body
                     writer.write(resp)
@@ -493,6 +818,7 @@ class SpecterHttpServer:
                 "HTTP/1.1 404 Not Found\r\n"
                 "Content-Type: application/json; charset=utf-8\r\n"
                 "Access-Control-Allow-Origin: *\r\n"
+                "Connection: close\r\n"
                 f"Content-Length: {len(not_found)}\r\n\r\n"
             ).encode("utf-8") + not_found
             writer.write(resp)
@@ -513,11 +839,16 @@ def main_cli():
     parser = argparse.ArgumentParser(description="Specter Unified Inference Gateway Server (OpenAI Compatible)")
     parser.add_argument("--host", default="127.0.0.1", help="Host address to bind (default: 127.0.0.1)")
     parser.add_argument("--port", type=int, default=8080, help="Port to listen on (default: 8080)")
-    parser.add_argument("--mock", action="store_true", default=True, help="Enable mock fallback node if no remote nodes configured")
+    parser.add_argument("--mock", action="store_true", help="Explicitly enable a simulated backend for testing")
+    parser.add_argument("--backend-url", default=os.getenv("SPECTER_BACKEND_URL"), help="Backend origin, without /v1 (for example http://127.0.0.1:11434)")
     args = parser.parse_args()
+    if not args.mock and not args.backend_url:
+        parser.error("Configure --backend-url or SPECTER_BACKEND_URL; use --mock only for tests")
 
     async def run_server():
         gateway = UnifiedInferenceGateway()
+        if args.backend_url:
+            gateway.register_node(BackendNode(node_id="configured_backend", base_url=args.backend_url))
         if args.mock:
             mock_node = BackendNode(
                 node_id="specter_sovereign_node",
@@ -533,7 +864,7 @@ def main_cli():
         await http_server.start()
 
         print(f"\n=======================================================")
-        print(f" SPECTER UNIFIED INFERENCE GATEWAY (v1.1.0)")
+        print(f" SPECTER UNIFIED INFERENCE GATEWAY (v3.0.0)")
         print(f" OpenAI Endpoint: http://{args.host}:{args.port}/v1/chat/completions")
         print(f" Health Check:   http://{args.host}:{args.port}/health")
         print(f" Models Catalog: http://{args.host}:{args.port}/v1/models")

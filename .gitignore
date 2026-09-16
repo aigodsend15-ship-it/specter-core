@@ -24,3 +24,16 @@ storage/
 # IDEs
 .vscode/
 .idea/
+
+# Builds e empacotamento
+build/
+dist/
+*.egg-info/
+.specter/
+supervisor_health.json
+*.lock
+.pytest_cache/
+History/
+Keystore/
+extract_sol_reply.py
+nul

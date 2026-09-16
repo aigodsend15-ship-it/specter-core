@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-SPECTER CORE 24/7 RESILIENT SUPERVISOR (v2.0 - SOBERANO & RESILIENTE)
+SPECTER CORE 24/7 RESILIENT SUPERVISOR (v3.0 - SOBERANO & RESILIENTE)
 ================================================================================
 Supervisor continuo e autonomo do Specter Core:
 - Feedback visual instantaneo a cada 5s (pulso de batimento cardiaco, contagem WAL, portas 8080/18088, RAM).
@@ -11,6 +11,8 @@ Supervisor continuo e autonomo do Specter Core:
 - Suporte a verificacao de saude (--health), parada segura (--stop) e execucao de ciclo unico (--single-cycle).
 ================================================================================
 """
+
+__version__ = "3.0.0"
 
 import argparse
 import json
@@ -145,6 +147,7 @@ def update_health_status(
     """Grava o status consolidado de saude em supervisor_health.json de forma atomica."""
     try:
         health_data = {
+            "version": "3.0.0",
             "timestamp": time.time(),
             "formatted_time": time.strftime("%Y-%m-%d %H:%M:%S"),
             "status": "HEALTHY" if last_status in ("OK", "PAUSED") else "DEGRADED",
@@ -339,9 +342,11 @@ def run_continuous_broker(
     cycle = 0
     running = True
 
-    gateway_sup = GatewaySupervisor(host="127.0.0.1", port=gateway_port, enabled=with_gateway)
+    gateway_8080 = GatewaySupervisor(host="127.0.0.1", port=8080, enabled=with_gateway)
+    gateway_18088 = GatewaySupervisor(host="127.0.0.1", port=18088, enabled=with_gateway)
     if with_gateway:
-        gateway_sup.start()
+        gateway_8080.start()
+        gateway_18088.start()
 
     def handle_signal(sig, frame):
         nonlocal running
@@ -360,9 +365,13 @@ def run_continuous_broker(
         "8080": check_port_online(8080),
         "18088": check_port_online(18088)
     }
+    gw_info = {
+        "gateway_8080": gateway_8080.get_info(),
+        "gateway_18088": gateway_18088.get_info()
+    }
     update_health_status(
         cycle, 0, "OK", db_stats, state="ACTIVE",
-        ports_status=ports_status, task_counts=task_counts, gateway_info=gateway_sup.get_info()
+        ports_status=ports_status, task_counts=task_counts, gateway_info=gw_info
     )
 
     pulse_icons = ["⚡", "♥", "●", "◈"]
@@ -385,9 +394,10 @@ def run_continuous_broker(
             time.sleep(sleep_interval)
             continue
 
-        # 1. Supervisao do processo secundario Gateway
+        # 1. Supervisao dos processos secundarios Gateway (Portas 8080 e 18088)
         if with_gateway:
-            gateway_sup.maintain_and_reconnect()
+            gateway_8080.maintain_and_reconnect()
+            gateway_18088.maintain_and_reconnect()
 
         # 2. Execucao resiliente do ciclo do broker
         last_status = "OK"
@@ -424,9 +434,17 @@ def run_continuous_broker(
         p8080_str = "ONLINE" if p8080 else "OFFLINE"
         p18088_str = "ONLINE" if p18088 else "OFFLINE"
         task_counts = get_db_task_counts()
-        child_pids = [gateway_sup.proc.pid] if gateway_sup.proc else None
+        child_pids = []
+        if gateway_8080.proc and gateway_8080.proc.poll() is None:
+            child_pids.append(gateway_8080.proc.pid)
+        if gateway_18088.proc and gateway_18088.proc.poll() is None:
+            child_pids.append(gateway_18088.proc.pid)
         ram_mb = get_ram_usage_mb(child_pids=child_pids)
         ports_status = {"8080": p8080, "18088": p18088}
+        gw_info = {
+            "gateway_8080": gateway_8080.get_info(),
+            "gateway_18088": gateway_18088.get_info()
+        }
 
         # Pulso a cada 5s no console
         log(f"[CICLO #{cycle}] {pulse} Status: ATIVO | Fila WAL: {task_counts['pending']} pendentes ({task_counts['total']} total) | Portas: [8080: {p8080_str} | 18088: {p18088_str}] | RAM: {ram_mb:.1f}MB | Uptime: {int(uptime)}s")
@@ -443,7 +461,7 @@ def run_continuous_broker(
             db_stats = passive_wal_checkpoint()
             update_health_status(
                 cycle, uptime, last_status, db_stats, state="ACTIVE",
-                ports_status=ports_status, task_counts=task_counts, gateway_info=gateway_sup.get_info()
+                ports_status=ports_status, task_counts=task_counts, gateway_info=gw_info
             )
 
         if max_cycles and cycle >= max_cycles:
@@ -458,12 +476,17 @@ def run_continuous_broker(
     # Finalizacao graciosa
     total_uptime = time.time() - start_time
     if with_gateway:
-        gateway_sup.stop()
+        gateway_8080.stop()
+        gateway_18088.stop()
 
     final_ports = {"8080": check_port_online(8080), "18088": check_port_online(18088)}
+    gw_final_info = {
+        "gateway_8080": gateway_8080.get_info(),
+        "gateway_18088": gateway_18088.get_info()
+    }
     update_health_status(
         cycle, total_uptime, "STOPPED", db_stats, state="STOPPED",
-        ports_status=final_ports, task_counts=get_db_task_counts(), gateway_info=gateway_sup.get_info()
+        ports_status=final_ports, task_counts=get_db_task_counts(), gateway_info=gw_final_info
     )
     log(f"=== SPECTER 24/7 SUPERVISOR ENCERRADO (Ciclos: {cycle}, Uptime: {int(total_uptime)}s) ===")
     return 0

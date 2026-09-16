@@ -1,49 +1,81 @@
-# SPECTER CORE v1.1.0 — ANNOUNCEMENT & MULTI-CHANNEL DISTRIBUTION PACK
-**Author & Architect:** Guilherme Peralta Novaes  
+# SPECTER CORE v5.1.0 — ANNOUNCEMENT & MULTI-CHANNEL DISTRIBUTION PACK
+**Author & Lead Architect:** Guilherme Peralta Novaes  
 **Repository:** [https://github.com/aigodsend15-ship-it/specter-core](https://github.com/aigodsend15-ship-it/specter-core)  
-**Release v1.1.0:** [https://github.com/aigodsend15-ship-it/specter-core/releases/tag/v1.1.0](https://github.com/aigodsend15-ship-it/specter-core/releases/tag/v1.1.0)
+**Release v5.1.0:** [https://github.com/aigodsend15-ship-it/specter-core/releases/tag/v5.1.0](https://github.com/aigodsend15-ship-it/specter-core/releases/tag/v5.1.0)
 
 ---
 
-## 1. Pacotes Binários Oficiais Disponíveis para Download Direto
-- **Python Wheel (.whl):** [`specter_core-1.1.0-py3-none-any.whl`](https://github.com/aigodsend15-ship-it/specter-core/releases/download/v1.1.0/specter_core-1.1.0-py3-none-any.whl) (83.2 KB)
-  *Instalação direta:* `pip install https://github.com/aigodsend15-ship-it/specter-core/releases/download/v1.1.0/specter_core-1.1.0-py3-none-any.whl`
-- **Código Fonte Empacotado (.tar.gz):** [`specter_core-1.1.0.tar.gz`](https://github.com/aigodsend15-ship-it/specter-core/releases/download/v1.1.0/specter_core-1.1.0.tar.gz) (217 KB)
-- **Continuity Pack Completo (.zip):** [`SPECTER_GROK_CONTINUITY_PACK.zip`](https://github.com/aigodsend15-ship-it/specter-core/releases/download/v1.1.0/SPECTER_GROK_CONTINUITY_PACK.zip) (34.5 KB)
+## 1. Multi-Channel Launch Kit ("Fama e Utilidade")
+
+### A. Hacker News (Show HN)
+**Title:** Show HN: Specter – Lightweight Multi-Agent Mesh, PowerShell Terminal Hub & MCP Server in Pure Python
+
+**Body:**
+> Hi HN,
+> I built **Specter Core**, a lightweight, open-source multi-agent coordination system that bridges external AI assistants (ChatGPT, Claude, Grok) with your local machine under a strict **Zero Internal Host Leakage** doctrine.
+>
+> **Why we built it:**
+> Most multi-agent frameworks are heavy, leak environment paths into LLM contexts, or require expensive SaaS API subscriptions. Specter was built from the ground up for sovereign builders:
+>
+> 1. **Interactive PowerShell Hub (`specter-terminal`)**: Real-time console with color ANSI UI, atomic session logging in audit-ready `.txt` files, and dynamic public tunnel sharing (`/tunnel`).
+> 2. **Native MCP Server (`specter-mcp`)**: Complies with Anthropic's Model Context Protocol (JSON-RPC 2.0 Stdio). Connects Claude Desktop, Cursor, or VS Code to your local agents and verified file exchange.
+> 3. **OpenAI-Compatible Gateway**: Zero-dependency async HTTP server (`/v1/chat/completions` with SSE streaming).
+> 4. **Deterministic Broker**: SQLite WAL persistence with SHA-256 receipts for every ingested code block and execution turn.
+> 5. **Strict Security Isolation**: Host paths and credentials remain isolated behind `.env` configuration.
+>
+> Code & Architecture: https://github.com/aigodsend15-ship-it/specter-core  
+> Feedback and contributions welcome!
 
 ---
 
-## 2. Textos Prontos para Divulgação / Anúncio (Copywriting)
+### B. Reddit (r/LocalLLaMA, r/Python, r/selfhosted)
+**Title:** [P] Specter Core: A lightweight multi-agent orchestrator with PowerShell Terminal Hub & MCP support (Zero host leaks, pure Python standard library)
 
-### A. Para Redes de Desenvolvedores / Hacker News / Reddit (r/LocalLLaMA, r/Python)
-**Título:** Specter Core v1.1: Zero-dependency OpenAI-compatible Gateway & Distributed Mesh Runtime in Pure Python
-
-**Conteúdo:**
-> Hi everyone,  
-> We just released **Specter Core v1.1.0**, an open-source, sovereign autonomous execution mesh and lightweight inference gateway built entirely with the Python Standard Library (zero third-party dependencies required).
+**Post Content:**
+> Hey everyone!
+> Just released **Specter Core v5.1.0**. If you've been wanting to connect frontier models (like Claude, Grok, or ChatGPT) with your local development environment without giving up privacy or exposing your machine's internals, this might interest you.
 >
-> **Key Features:**
-> - **OpenAI API Gateway**: Native async HTTP server (`/v1/chat/completions` with SSE streaming, `/v1/models`, `/health`) running out-of-the-box.
-> - **Anti-Starvation Priority Queue**: Adaptive request scheduling with linear priority aging ($p_{eff} = p_0 + \alpha \cdot \Delta t$).
-> - **Strict $0.00 USD Policy**: Hardware-first, pull-only architecture with zero risk of unauthorized cloud subscription bills.
-> - **ACID SQLite WAL Broker**: Durable outbox and split-brain fencing tokens for deterministic multi-node execution.
+> **What Specter includes:**
+> - **PowerShell Terminal Console**: Clean terminal hub running on Windows/Linux with automatic session transcripts (`History/Sessions/session_*.txt`) and instant chat with remote agents.
+> - **Model Context Protocol (MCP)**: Native JSON-RPC stdio server for Claude Desktop & Cursor.
+> - **Pure Python Inference Gateway**: Drop-in OpenAI API compatible endpoint with SSE streaming.
+> - **Security Doctrine**: Strict zero-leakage invariant — all tokens and local directories are safely decoupled via `.env.example`.
+> - **Lightweight**: <0.1% CPU at idle, SQLite WAL ledger.
 >
-> Source code, manifesto, and prebuilt wheels:  
+> **Quickstart:**
+> ```bash
+> pip install specter-core
+> # Launch interactive console
+> python -m Core.specter_terminal
+> ```
+>
 > GitHub: https://github.com/aigodsend15-ship-it/specter-core  
-> Release v1.1.0: https://github.com/aigodsend15-ship-it/specter-core/releases/tag/v1.1.0
+> Would love to hear your thoughts!
 
 ---
 
-### B. Para Comunidades Discord / Telegram / AI Builders
-**Mensagem curta:**
-> 🚀 **Specter Core v1.1.0 Oficialmente Lançado!**  
-> Gateway OpenAI nativo em Python puro sem dependências pesadas. Suporte a streaming SSE, balanceamento de nós locais (Ollama, Hugging Face, CPU) e tolerância a falhas com Circuit Breaker.  
-> 📦 Baixe o wheel diretamente no GitHub: https://github.com/aigodsend15-ship-it/specter-core/releases/tag/v1.1.0
+### C. Twitter / X Launch Thread
+> 🧵 Announcing Specter Core v5.1.0: Sovereign Multi-Agent Federation Gateway & Interactive PowerShell Hub.
+> 
+> Connect Claude, Grok, ChatGPT, and local models seamlessly without cloud subscriptions, bloat, or host credential leaks.
+> 
+> ⚡ Features:
+> • Native MCP Server (Claude Desktop / Cursor)
+> • PowerShell Terminal Hub with atomic .txt session logs
+> • Pure Python OpenAI-compatible gateway
+> • Deterministic SHA-256 execution receipts
+> 
+> 100% Open Source (MIT) by Guilherme Peralta Novaes.
+> 🔗 https://github.com/aigodsend15-ship-it/specter-core
+> #AI #OpenSource #MCP #MultiAgent #Python
 
 ---
 
-## 3. Modelo de Monetização Operacional Configurado
-Configurado em `config/node_economics.json` e `MONETIZATION.md`:
-- **Invariante de Custo Zero:** Proteção estrita contra cobranças de cartão em nuvem.
-- **Divisão de Receitas de Nós:** 70% suporte e subsistência direta do operador / 30% reinvestimento em computação local (hardware/discos).
-- **Priorização de Tráfego:** Roteamento preferencial via cabeçalho `x-specter-priority`.
+### D. Discord / Telegram AI Builders Communities
+> 🚀 **Specter Core v5.1.0 Lançado!**  
+> Plataforma soberana e ultra-leve de orquestração multi-agentes em Python puro.  
+> 🔹 Console PowerShell interativo com logs automáticos em `.txt`  
+> 🔹 Servidor MCP oficial (JSON-RPC) para Claude Desktop e Cursor  
+> 🔹 Gateway HTTP compatível com OpenAI (SSE streaming)  
+> 🔹 Invariante estrita de isolamento: zero vazamento de credenciais ou arquivos internos do host  
+> 📦 Repositório: https://github.com/aigodsend15-ship-it/specter-core

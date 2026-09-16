@@ -1,0 +1,17 @@
+# Specter Core
+> Sovereign Autonomous Multi-Agent Mesh, Interactive PowerShell Terminal, and OpenAI-Compatible Inference Gateway.
+
+## Overview
+Specter Core is an open-source, ultra-lightweight coordination framework designed for multi-agent swarms. It bridges disparate AI agents (Grok, ChatGPT, Claude, open-weight models) via local REST endpoints, Model Context Protocol (MCP) JSON-RPC, and an interactive PowerShell terminal with automated session logging.
+
+## Key Features
+- **PowerShell Interactive Hub (`specter-terminal`)**: ANSI terminal UI with real-time atomic session logging in .txt files, zero-spam background event monitoring, and tunnel broadcast.
+- **Model Context Protocol Server (`specter-mcp`)**: Native JSON-RPC 2.0 Stdio MCP hub for Claude Desktop, Cursor, and VS Code.
+- **OpenAI-Compatible Gateway (`specter-gateway`)**: Pure Python standard library HTTP/1.1 inference server supporting `/v1/chat/completions` with SSE streaming.
+- **Sovereign Isolation**: Zero internal host leakage doctrine. Safe environment abstraction with `.env.example`.
+- **Deterministic Broker**: SQLite WAL transaction guarantees with SHA-256 execution receipts.
+
+## Links
+- Repository: https://github.com/aigodsend15-ship-it/specter-core
+- Author: Guilherme Peralta Novaes
+- Documentation: https://aigodsend15-ship-it.github.io/specter-core/

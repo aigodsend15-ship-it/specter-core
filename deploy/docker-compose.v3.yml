@@ -1,0 +1,57 @@
+version: "3.8"
+
+services:
+  specter-gateway:
+    image: python:3.11-slim
+    container_name: specter-core-v3
+    restart: always
+    working_dir: /app
+    volumes:
+      - ./Core:/app/Core
+      - specter-storage:/app/Core/storage
+      - specter-logs:/app/Core/logs
+      - specter-exports:/app/Core/exports
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SPECTER_HOST=0.0.0.0
+      - SPECTER_PORT=8080
+      - SPECTER_HEALTH_INTERVAL_S=30
+      - SPECTER_AUTHOR=Guilherme Peralta Novaes
+    command: >
+      sh -c "pip install --no-cache-dir aiohttp &&
+             python -u Core/unified_inference_gateway.py"
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  specter-healer:
+    image: python:3.11-slim
+    container_name: specter-auto-healer
+    restart: always
+    working_dir: /app
+    volumes:
+      - ./Core:/app/Core
+      - specter-storage:/app/Core/storage
+      - specter-logs:/app/Core/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - SPECTER_GATEWAY_8080=http://specter-gateway:8080
+    command: >
+      sh -c "pip install --no-cache-dir aiohttp &&
+             python -u Core/auto_healer.py"
+    depends_on:
+      specter-gateway:
+        condition: service_healthy
+
+volumes:
+  specter-storage:
+    name: specter_v3_storage
+  specter-logs:
+    name: specter_v3_logs
+  specter-exports:
+    name: specter_v3_exports

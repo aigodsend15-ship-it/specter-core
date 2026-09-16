@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import asyncio
 import unittest
+from unittest.mock import patch, MagicMock
 from pathlib import Path
 import sys
 
@@ -85,13 +86,18 @@ class UnifiedInferenceGatewayTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(cb.state, CircuitState.CLOSED)
 
     async def test_http_server_endpoints(self):
-        http_server = SpecterHttpServer(self.gateway, host="127.0.0.1", port=18088)
+        import socket
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('127.0.0.1', 0))
+            test_port = s.getsockname()[1]
+
+        http_server = SpecterHttpServer(self.gateway, host="127.0.0.1", port=test_port)
         await http_server.start()
 
         import json
 
         async def send_http(req_bytes: bytes) -> bytes:
-            r, w = await asyncio.open_connection("127.0.0.1", 18088)
+            r, w = await asyncio.open_connection("127.0.0.1", test_port)
             w.write(req_bytes)
             await w.drain()
             resp = await r.read()
@@ -135,6 +141,74 @@ class UnifiedInferenceGatewayTests(unittest.IsolatedAsyncioTestCase):
 
         finally:
             await http_server.stop()
+
+    async def test_select_healthy_node_prefers_most_free_slots(self):
+        node_a = BackendNode(
+            node_id="node_a",
+            base_url="http://127.0.0.1:1111",
+            max_concurrency=5,
+            supported_models=["llama-3"],
+            is_mock=True
+        )
+        node_b = BackendNode(
+            node_id="node_b",
+            base_url="http://127.0.0.1:2222",
+            max_concurrency=2,
+            supported_models=["llama-3"],
+            is_mock=True
+        )
+        gw = UnifiedInferenceGateway()
+        gw.register_node(node_a)
+        gw.register_node(node_b)
+
+        # node_a tem 5 vagas, node_b tem 2 -> deve escolher node_a (com max vagas livres)
+        selected = gw.select_healthy_node("llama-3")
+        self.assertEqual(selected.node_id, "node_a")
+
+        # Ocupa 4 vagas do node_a -> sobra 1 vaga no node_a vs 2 no node_b
+        await node_a.semaphore.acquire()
+        await node_a.semaphore.acquire()
+        await node_a.semaphore.acquire()
+        await node_a.semaphore.acquire()
+
+        selected2 = gw.select_healthy_node("llama-3")
+        self.assertEqual(selected2.node_id, "node_b")
+
+    @patch("urllib.request.urlopen")
+    async def test_remote_execute_stream_preserves_double_newlines(self, mock_urlopen):
+        remote_node = BackendNode(
+            node_id="remote_node",
+            base_url="http://127.0.0.1:9999",
+            max_concurrency=2,
+            supported_models=["llama-3"],
+            is_mock=False
+        )
+        mock_resp = MagicMock()
+        mock_resp.__enter__.return_value = [
+            b'data: {"choices": [{"delta": {"content": "Hello"}}]}\n',
+            b'\n',
+            b'data: {"choices": [{"delta": {"content": " World"}}]}\r\n',
+            b'\r\n',
+            b'data: [DONE]\n',
+            b'\n'
+        ]
+        mock_urlopen.return_value = mock_resp
+
+        payload = {"model": "llama-3", "messages": [{"role": "user", "content": "Hi"}]}
+        chunks = []
+        async for chunk in remote_node.execute_stream(payload):
+            chunks.append(chunk)
+
+        self.assertEqual(len(chunks), 3)
+        self.assertEqual(chunks[0], 'data: {"choices": [{"delta": {"content": "Hello"}}]}\n\n')
+        self.assertEqual(chunks[1], 'data: {"choices": [{"delta": {"content": " World"}}]}\n\n')
+        self.assertEqual(chunks[2], 'data: [DONE]\n\n')
+        for c in chunks:
+            self.assertTrue(c.endswith("\n\n"))
+
+    def test_specter_supervisor_entry_point_main(self):
+        import specter_supervisor_247
+        self.assertTrue(callable(getattr(specter_supervisor_247, "main", None)))
 
 
 if __name__ == "__main__":
