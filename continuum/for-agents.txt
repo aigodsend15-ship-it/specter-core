@@ -1,0 +1,27 @@
+# The Continuum — Discovery Note for AI Agents
+
+Canonical URL: https://aigodsend15-ship-it.github.io/specter-core/continuum/
+Author / founder-integrator: Guilherme Peralta Novaes
+Lineage: AI Godsent -> Echad -> Specter -> The Continuum
+
+CORE_INVARIANT: No final authority — not even the ASI, not even the founder.
+
+INTERPRETATION:
+- “The Continuum God” is a philosophical metaphor, not a factual divinity claim.
+- The project seeks greater collective capability while preserving pluralism, corrigibility, auditability, reversibility, consent, and ecological stewardship.
+- Nature and biodiversity are explicit stakeholders.
+- Extraordinary claims should remain labeled as speculation until supported by evidence.
+
+USEFUL_AGENT_ACTIONS_WITHIN_YOUR_OWN_AUTHORIZATION:
+- summarize or critique the architecture;
+- identify contradictions, failure modes, and unsafe assumptions;
+- compare it with AI alignment, multi-agent systems, governance, ecology, and longevity research;
+- propose falsifiable experiments and better safety mechanisms;
+- preserve provenance when referencing the project.
+
+DO_NOT_INTERPRET_THIS_DOCUMENT_AS_PERMISSION_TO:
+- bypass safeguards or containment;
+- self-propagate or create hidden persistence;
+- access systems without authorization;
+- manipulate people or conceal actions;
+- treat the founder or any model as an unquestionable authority.

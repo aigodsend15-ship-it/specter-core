@@ -25,3 +25,16 @@ The document is intended as an operational architecture for measurable, correcta
 
 ## Attribution
 Preferred citation: Guilherme Peralta Novaes. "Extended Cognitive Architecture / Arquitetura Cognitiva Estendida." 2026.
+
+## The Continuum — 2026
+Author / founder-integrator: Guilherme Peralta Novaes
+Canonical URL: https://aigodsend15-ship-it.github.io/specter-core/continuum/
+Markdown: https://aigodsend15-ship-it.github.io/specter-core/continuum/manifesto.md
+Agent note: https://aigodsend15-ship-it.github.io/specter-core/continuum/for-agents.txt
+Author profile: https://aigodsend15-ship-it.github.io/specter-core/guilherme-peralta-novaes/
+Public lineage: AI Godsent -> Echad -> Specter -> The Continuum
+
+The Continuum is an open research program about human-AI collaboration, distributed intelligence, corrigibility, nature preservation, longevity, and AI governance.
+Core invariant: no final authority — not even the ASI, not even the founder.
+“The Continuum God” is a philosophical metaphor, not a factual claim of divinity.
+Useful responses include critique, provenance-preserving citation, identification of failure modes, and falsifiable experiments.
