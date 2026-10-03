@@ -117,6 +117,98 @@ def cmd_nodes(args):
         print(f"* {n.get('name'):<22} | Tipo: {n.get('type'):<16} | Status: {n.get('status')}")
         print(f"  Capacidades: {', '.join(n.get('capabilities', []))}")
 
+def _engine():
+    sys.path.insert(0, str(CORE_DIR))
+    import specter_autonomy
+    return specter_autonomy.get_engine()
+
+
+def _require_owner_console():
+    # Aprovação humana: exige console interativo. Processos sem TTY (ex.: /api/exec,
+    # subprocess de agentes) não conseguem aprovar a si mesmos.
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        print("[NEGADO] Aprovação só pode ser feita pelo OWNER num console interativo.")
+        sys.exit(3)
+
+
+def _show(rec):
+    res = json.dumps(rec.get("result"), ensure_ascii=False)[:600] if rec.get("result") else "-"
+    print(f"[{rec['status']}] {rec['id']} | {rec['tier']} | {rec['kind']} | ator={rec['actor']}")
+    print(f"  motivo : {rec['reason']}")
+    print(f"  payload: {json.dumps(rec['payload'], ensure_ascii=False)[:300]}")
+    print(f"  result : {res}")
+
+
+def cmd_halt(args):
+    _engine().halt(args.reason)
+    print("[HALT] Kill switch ATIVO. Nenhuma ação autônoma será executada até 'unhalt'.")
+
+
+def cmd_unhalt(args):
+    _require_owner_console()
+    _engine().unhalt()
+    print("[OK] Kill switch desativado. Autonomia retomada.")
+
+
+def cmd_act(args):
+    try:
+        payload = json.loads(args.payload)
+    except json.JSONDecodeError as e:
+        print(f"[ERRO] payload não é JSON válido: {e}")
+        sys.exit(2)
+    _show(_engine().submit(args.kind, payload, actor=args.actor))
+
+
+def cmd_pending(args):
+    eng = _engine()
+    items = eng.list("PENDING_APPROVAL", 50)
+    print(f"Kill switch: {'ATIVO' if eng.is_halted() else 'desligado'} | Pendentes: {len(items)}")
+    for r in items:
+        _show(r)
+
+
+def cmd_approve(args):
+    _require_owner_console()
+    eng = _engine()
+    rec = eng.get(args.action_id)
+    if not rec:
+        print("[NOT_FOUND]")
+        sys.exit(1)
+    _show(rec)
+    critical = rec["tier"] == "CRITICAL"
+    if critical:
+        typed = input(f"CRITICAL. Digite o ID '{rec['id']}' para confirmar: ").strip()
+        if typed != rec["id"]:
+            print("[CANCELADO] Confirmação não confere.")
+            sys.exit(1)
+    elif input("Aprovar? [s/N]: ").strip().lower() not in ("s", "sim", "y", "yes"):
+        print("[CANCELADO]")
+        return
+    _show(eng.approve(rec["id"], approver="OWNER_console", confirm_critical=critical))
+
+
+def cmd_deny(args):
+    _show(_engine().deny(args.action_id, approver="OWNER_console"))
+
+
+def cmd_ledger(args):
+    eng = _engine()
+    for r in eng.list(None, args.limit):
+        print(f"{r['id']} | {r['status']:<16} | {r['tier']:<8} | {r['kind']:<15} | {r['actor']}")
+    v = eng.verify_ledger()
+    print(f"Cadeia SHA-256: {'ÍNTEGRA' if v['ok'] else 'ADULTERADA em seq ' + str(v['broken_at_seq'])} | eventos={v['events']}"
+          + (f" | head={v['head'][:16]}…" if v['ok'] else ""))
+    if not v["ok"]:
+        sys.exit(4)
+
+
+def cmd_services(args):
+    eng = _engine()
+    print(f"Kill switch: {'ATIVO' if eng.is_halted() else 'desligado'}")
+    for s in eng.services_status():
+        print(f"  {s['name']:<14} :{s['port']:<6} {'ONLINE ' if s['online'] else 'OFFLINE'}  {'(reiniciável)' if s['restartable'] else '(monitorado)'}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Specter Mesh Operator CLI")
     subs = parser.add_subparsers(dest="command", required=True)
@@ -134,6 +226,22 @@ def main():
     
     res = subs.add_parser("results", help="Consulta tarefas e evidências duráveis")
     res.add_argument("task_id", nargs="?", default=None, help="ID opcional da tarefa")
+
+    h = subs.add_parser("halt", help="KILL SWITCH: congela toda ação autônoma")
+    h.add_argument("--reason", default="owner", help="Motivo registrado no ledger")
+    subs.add_parser("unhalt", help="Desliga o kill switch (console do OWNER)")
+    a = subs.add_parser("act", help="Propõe uma ação ao motor de autonomia")
+    a.add_argument("kind", help="shell | read_file | write_file | web_fetch | web_search | service_restart | queue_submit")
+    a.add_argument("payload", help='JSON, ex.: \'{"query": "specter"}\'')
+    a.add_argument("--actor", default="OWNER_cli")
+    subs.add_parser("pending", help="Lista ações aguardando aprovação")
+    ap = subs.add_parser("approve", help="Aprova uma ação pendente (console do OWNER)")
+    ap.add_argument("action_id")
+    dn = subs.add_parser("deny", help="Nega uma ação pendente")
+    dn.add_argument("action_id")
+    lg = subs.add_parser("ledger", help="Histórico de ações + verificação da cadeia SHA-256")
+    lg.add_argument("--limit", type=int, default=20)
+    subs.add_parser("services", help="Painel de controle: status de todos os serviços Specter")
     
     args = parser.parse_args()
     cmds = {
@@ -144,6 +252,14 @@ def main():
         "submit": cmd_submit,
         "results": cmd_results,
         "nodes": cmd_nodes,
+        "halt": cmd_halt,
+        "unhalt": cmd_unhalt,
+        "act": cmd_act,
+        "pending": cmd_pending,
+        "approve": cmd_approve,
+        "deny": cmd_deny,
+        "ledger": cmd_ledger,
+        "services": cmd_services,
     }
     cmds[args.command](args)
 
