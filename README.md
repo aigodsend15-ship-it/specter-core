@@ -48,6 +48,13 @@ Specter operates under a **Strict Sovereign Isolation Invariant**:
 └──────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
+### 🧠 Sovereign Episodic Memory Engine (`Core/specter_memory_engine.py`)
+- **Tripartite Capability Security**: Decouples **Memory Records** (content-addressed SHA-256), **Authority Capabilities** (unforgeable HMAC tokens), and **Retrieval Receipts** (atomic Merkle proofs) following the formal seL4 / Dennis & Van Horn model.
+- **Microsecond Deterministic Retrieval**: Pure-Python Okapi BM25 ($k_1=1.5, b=0.75$) + Trigram inverted index over SQLite WAL — zero bloated vector DB or LangChain overhead.
+- **$O(1)$ Tombstone Revocation**: Instant cryptographic purge of revoked capabilities prior to ranking, guaranteeing mathematical non-interference.
+- **Merkle State Commitment**: Emits unforgeable inclusion proofs `verify_proof(leaf, path, root)` verifying exact context integrity at the IPC boundary.
+
+
 1. **PowerShell Terminal Hub v5.1 (`specter-terminal`)**:
    - Interactive terminal console running directly in PowerShell or Linux bash.
    - Real-time session logger writing readable, audit-ready `.txt` transcript files (`History/Sessions/session_YYYY-MM-DD_HHMMSS.txt`).
