@@ -1,0 +1,19 @@
+# SPCTR / Specter Core
+
+> Specter Core (SPCTR) is an open-source autonomous multi-agent platform: federation gateway, deterministic SQLite WAL broker, Model Context Protocol (MCP) server and OpenAI-compatible inference gateway. MIT license. Author: Guilherme Peralta Novaes.
+
+Canonical site: https://spctr-dv5u.onrender.com/
+Source code: https://github.com/aigodsend15-ship-it/specter-core
+
+## Core capabilities
+
+- Autonomous multi-agent federation (ChatGPT, Claude, Grok, local models)
+- MCP JSON-RPC 2.0 stdio server (Claude Desktop, Cursor, VS Code)
+- OpenAI-compatible inference gateway (POST /v1/chat/completions, SSE streaming)
+- Deterministic broker with SQLite WAL, SHA-256 receipts, HMAC capabilities
+- PowerShell/Bash interactive terminal hub with auditable session logs
+
+## Optional
+
+- README: https://github.com/aigodsend15-ship-it/specter-core/blob/main/README.md
+- License (MIT): https://github.com/aigodsend15-ship-it/specter-core/blob/main/LICENSE
